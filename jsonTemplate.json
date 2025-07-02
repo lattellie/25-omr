@@ -1,35 +1,49 @@
 {
-  "numPage": 26,
+  "numPage": 20,
   "numPerPage": 1,
   "rotate": false,
   "tsChange": [
     {
       "page": 1,
-      "bar": 0,
       "loc":[0,0],
-      "time_signature": [3,4],
+      "time_signature": [4,4],
       "mov": 1
     },
     {
-      "page": 8,
-      "bar": 30,
-      "loc":[4,0],
-      "time_signature": [9,8],
+      "page": 7,
+      "loc":[0,0],
+      "time_signature": [2,4],
       "mov":2
     },
     {
-      "page": 14,
-      "bar": 0,
-      "loc":[0,0],
+      "page": 9,
+      "loc":[3,0],
       "time_signature": [3,4],
       "mov":3
     },
     {
-      "page": 16,
-      "bar": 29,
-      "loc":[3,0],
-      "time_signature": [2,4],
-      "mov":4
+      "page": 11,
+      "loc":[2,0],
+      "time_signature": [12,8],
+      "mov":3
+    },
+    {
+      "page": 15,
+      "loc":[0,0],
+      "time_signature": [4,4],
+      "mov":3
+    },
+    {
+      "page": 15,
+      "loc":[2,0],
+      "time_signature": [12,8],
+      "mov":3
+    },
+    {
+      "page": 19,
+      "loc":[1,0],
+      "time_signature": [4,4],
+      "mov":3
     }
   ],
   "numTrack": 4,

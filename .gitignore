@@ -2,3 +2,5 @@ omrEnv
 .vscode/
 __pycache__/
 string_dataset/
+!string_dataset/pdf_data/beethoven1/beethoven1.json
+!string_dataset/pdf_data/beethoven1/beethoven1.pdf

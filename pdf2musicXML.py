@@ -3329,7 +3329,7 @@ def editBarTS(barList:List[List[Bar]], allChanges:List[dict], pageNum, numBarsPe
 if __name__ == '__main__':
     base_folder = 'string_dataset/pdf_data/'
     base_output_folder = 'string_dataset/output/'
-    for piece_name in [f"mendelssohn{i}" for i in range(1,7)]:
+    for piece_name in [f"mendelssohn1"]:
         # piece_name = 'beethoven2'
         OUTPUT_BASE_FOLDER = os.path.join(base_output_folder, piece_name)
         if not os.path.isdir(OUTPUT_BASE_FOLDER):

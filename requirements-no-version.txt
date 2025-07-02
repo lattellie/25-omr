@@ -43,10 +43,10 @@ mpmath
 music21
 nest-asyncio
 networkx
-numpy
+numpy==1.26.4
 omegaconf
-onnxruntime
-onnxruntime-gpu
+onnxruntime==1.18.0
+onnxruntime-gpu==1.18.0
 opencv-python
 packaging
 parso
