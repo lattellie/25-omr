@@ -1,79 +1,74 @@
 # String Quartet OMR
 
+
+- Input: PDF + JSON file specifying where the time signature shifts were
+- Output: MusicXML file
+
 ## Prequisites
 
 - Python 3.9
 - Optional: NVidia GPU with CUDA 12.4
 
-## Getting started
+## Set Up
 
 - Clone the repository
 - Install dependencies using `pip install -r requirements.txt`
     If having issues, try using `pip install -r requirements-no-versions.txt`
-- 
 
-## Example
+## Test run
+- Demo score:
+  - run the pdf2musicXML.py, which will run on beethoven1's string quartet (found in string_dataset/pdf_data/beethoven1.pdf)
+  - output can be found in string_dataset/output once the model finishes execution.
+- Test your own score:
+    - Add your pdf in pdf_data/[piece_name][piece_name].pdf (for instance, if your pdf is called mozart1, save it in `pdf_data/mozart1/mozart1.pdf`)
+    - Add the specification of where the time signature shifts were to a new .json file, template can be found in jsonTemplate.json, save it in pdf_data/[piece_name][piece_name].json (for instance, if your pdf is called mozart1, save it in `pdf_data/mozart1/mozart1.json`)
+    - Add the piece name in string_dataset/piecesToRun, for instance ['mozart1']
+    - JSON file explained
+    ```python
+        {
+    "numPage": 20,  # how many pages are in the pdf
+    "numPerPage": 1, # default 1 
+    "rotate": false, # default false
+    "tsChange": [
+        # MUST have the fist one
+        {
+        "page": 1,
+        "loc":[0,0],
+        "time_signature": [4,4], # the inital time signature
+        "mov": 1 # not used for now
+        },
+        # on page 7, the first line fisrt bar, 
+        # time signature changed to 2/4
+        {
+        "page": 7,
+        "loc":[0,0],
+        "time_signature": [2,4],
+        "mov":2
+        },
+        # on page 9, the 4th line first bar, 
+        # time signature changed to 3/4
+        {
+        "page": 9,
+        "loc":[3,0],
+        "time_signature": [3,4],
+        "mov":3
+        },
+        # ... etc.
+        {
+        "page": 11,
+        "loc":[2,0],
+        "time_signature": [12,8],
+        "mov":3
+        }
+    ],
+    "numTrack": 4, # how many instruments are there
+    "track_shift": [0,0,0,0], # not used for now (for transposing instruments, not used in string quartet)
+    "clef_options": [[1],[1],[0],[-1,-2]]
+    # what are the possible clefs in that track
+    # 1: treble, 0: alto (viola), -1: bass, -2: tenor (cello)
+    # [[first track options],[2nd track options],[3rd ...], [4th...]]
+    }
+    ```
 
-The example below provides an overview of the current performance of the implementation. While some errors are present in the output, the overall structure remains accurate.
 
-|                                          Original Image                                           |                                                                               homr Result                                                                                |
-| :-----------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
-| <img src="https://github.com/BreezeWhite/oemer/blob/main/figures/tabi.jpg?raw=true" width="400" > | <img src="https://github.com/liebharc/homr/blob/main/figures/tabi.svg?raw=true" alt="Go to https://github.com/liebharc/homr if this image isn't displayed" width="400" > |
-
-The homr result is obtained by processing the [homr output](figures/tabi.musicxml) and rendering it with [musescore](https://musescore.com/).
-
-## Limitations
-
-The current implementation focuses on pitch and rhtyhm information on the bass or treble clef, neglecting dynamics, articulation, double sharps/flats, and other musical symbols.
-
-## Technical Details
-
-homr employs segmentation techniques outlined in [oemer](https://github.com/BreezeWhite/oemer) to identify staff lines, clefs, bar lines, and note heads in an image. These components are combined to determine the position of staffs within the picture.
-
-Subsequently, each staff image undergoes transformation using a transformer model (based on [Polyphonic-TrOMR](https://github.com/NetEase/Polyphonic-TrOMR)) to identify symbols present on the staff. Pitch information is cross-validated with note head data obtained from the segmentation model.
-
-The results are then converted into MusicXML format and saved to disk.
-
-### Image Predictions
-
-homr utilizes oemer's UNet implementations to isolate staff lines and other symbols for note head identification. These predictions serve as input for staff and symbol detection.
-
-Preprocessing the image has shown to enhance robustness against noisy backgrounds and variations in brightness.
-
-### Staff and Symbol Detection
-
-The detection process involves extracting model data types from the image predictions. A key concept is the "staff anchor," which serves as a reference point ensuring accurate staff detection amidst symbols that might obscure it. Clefs and bar lines are currently utilized as anchor symbols.
-
-For each anchor, the algorithm attempts to locate five staff lines and constructs the remainder of the staff around these anchors.
-
-#### Unit Sizes
-
-The unit size denotes the distance between staff lines, which may vary due to camera perspective. To accommodate this, the unit size is calculated per staff.
-
-#### Connecting Staffs
-
-Support for multiple voices and grand staffs is facilitated by identifying braces and brackets to combine individual staffs.
-
-### Rhythm Parsing
-
-Dewarped images of each staff are computed and passed through a transformer to extract staff contents. From this point onward, semantic information from the sheet music is utilized rather than pixel-based data.
-
-### XML Generation
-
-The previous outputs in terms of result model objects are used to generate music XML.
-
-## Citation
-
-If you use this code in your research work, please cite [oemer](https://github.com/BreezeWhite/oemer) and [Polyphonic-TrOMR](https://github.com/NetEase/Polyphonic-TrOMR).
-
-## Name
-
-The name "homr" stands for Homer's Optical Music Recognition (OMR), leaving the interpretation of "Homer" to the user's discretion, whether referring to the ancient poet [Homer](https://en.wikipedia.org/wiki/Homer) or the iconic character from [The Simpsons](https://en.wikipedia.org/wiki/The_Simpsons).
-
-## Thanks
-
-This project builds upon previous work, including:
-
-- The segmentation models of [oemer](https://github.com/BreezeWhite/oemer)
-- The transformer model of [Polyphonic-TrOMR](https://github.com/NetEase/Polyphonic-TrOMR)
-- The starter template provided by [Benjamin Roland](https://github.com/Parici75/python-poetry-bootstrap)
+This project utilized the segmentation models from [oemer](https://github.com/BreezeWhite/oemer)

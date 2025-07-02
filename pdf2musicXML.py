@@ -3327,8 +3327,14 @@ def editBarTS(barList:List[List[Bar]], allChanges:List[dict], pageNum, numBarsPe
 if __name__ == '__main__':
     base_folder = 'string_dataset/pdf_data/'
     base_output_folder = 'string_dataset/output/'
-    for piece_name in [f"mendelssohn1"]:
-        # piece_name = 'beethoven2'
+    pieces = []
+    if not os.path.isdir(base_folder):
+        os.mkdir(base_folder)
+    if not os.path.isdir(base_output_folder):
+        os.mkdir(base_output_folder)
+    with open('string_dataset/piecesToRun.json','r') as f:
+        pieces = json.load(f)
+    for piece_name in pieces:
         OUTPUT_BASE_FOLDER = os.path.join(base_output_folder, piece_name)
         if not os.path.isdir(OUTPUT_BASE_FOLDER):
             os.mkdir(OUTPUT_BASE_FOLDER)
