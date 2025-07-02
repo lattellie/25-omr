@@ -2159,8 +2159,8 @@ def getCTimeSignature(image:np.ndarray, imgMasked:np.ndarray, staffList:List[Sta
     tsCImage = image.copy()
     # create a matrix of zeros for later (add 1 for each matching boxes and then count + threshold)
     tsCount = np.zeros((image.shape[0], image.shape[1]))
-    match_CThick = cv2.imread(r"C:\Ellie\ellie2023~2024\iis\omr-iis\CpatternThick.jpg",cv2.IMREAD_GRAYSCALE)
-    match_COri = cv2.imread(r"C:\Ellie\ellie2023~2024\iis\omr-iis\CpatternLong.jpg",cv2.IMREAD_GRAYSCALE)
+    match_CThick = cv2.imread("training/CpatternThick.jpg",cv2.IMREAD_GRAYSCALE)
+    match_COri = cv2.imread("training/CpatternLong.jpg",cv2.IMREAD_GRAYSCALE)
     for staff in staffList:
         sf = staff.ys
         seg_img = image[sf[0]:sf[-1],:,1]
@@ -2199,8 +2199,8 @@ def getTimeSignature4(image:np.ndarray, imgMasked:np.ndarray, staffList:List[Sta
     tsCImage = image.copy()
     # create a matrix of zeros for later (add 1 for each matching boxes and then count + threshold)
     tsCount = np.zeros((image.shape[0], image.shape[1]))
-    match_8Ori = cv2.imread(r"C:/Ellie/ellie2023~2024/iis/omr-iis/8Pattern.jpg",cv2.IMREAD_GRAYSCALE)
-    match_4Ori = cv2.imread(r"C:/Ellie/ellie2023~2024/iis/omr-iis/4Pattern4x3.jpg",cv2.IMREAD_GRAYSCALE)
+    match_8Ori = cv2.imread("training/8Pattern.jpg",cv2.IMREAD_GRAYSCALE)
+    match_4Ori = cv2.imread("training/4Pattern4x3.jpg",cv2.IMREAD_GRAYSCALE)
     thres = [0.15, 0.13]
     for staff in staffList:
         sf = staff.ys
@@ -2496,11 +2496,9 @@ def exportXML(barList:List[List[Bar]], numTrack:int, image:np.ndarray|None = Non
     score = stream.Score()
     score.metadata = metadata.Metadata()
     score.metadata.title = "Example MusicXML"
-    score.metadata.composer = "Lattellie"
     score2 = stream.Score() # for those with shift
     score2.metadata = metadata.Metadata()
     score2.metadata.title = "Example MusicXML"
-    score2.metadata.composer = "Lattellie"
 
     part = [stream.Part() for n in range(numTrack)]
     part2 = [stream.Part() for n in range(numTrack)]
@@ -3348,8 +3346,8 @@ if __name__ == '__main__':
         if not os.path.isdir(run_img_folder):
             savePdf2Png(piece_base_folder,config['numPerPage'],config['rotate'])
         
-        stemUpPth = r"C:\Ellie\ellie2023~2024\iis\omr-iis\training\stemupImg32x32_best.pth"
-        stemDownPth = r"C:\Ellie\ellie2023~2024\iis\omr-iis\training\stemdownImg32x32_best.pth"
+        stemUpPth = "training/stemupImg32x32_best.pth"
+        stemDownPth = "training/stemdownImg32x32_best.pth"
         stemUpModel = Single_Stem_Classifier(stemUpPth, 3)
         stemDownModel = Single_Stem_Classifier(stemDownPth, 3)
 
