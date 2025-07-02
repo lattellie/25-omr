@@ -1,0 +1,4 @@
+omrEnv
+.vscode/
+__pycache__/
+string_dataset/

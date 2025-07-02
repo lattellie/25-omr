@@ -1,0 +1,38 @@
+{
+  "numPage": 26,
+  "numPerPage": 1,
+  "rotate": false,
+  "tsChange": [
+    {
+      "page": 1,
+      "bar": 0,
+      "loc":[0,0],
+      "time_signature": [3,4],
+      "mov": 1
+    },
+    {
+      "page": 8,
+      "bar": 30,
+      "loc":[4,0],
+      "time_signature": [9,8],
+      "mov":2
+    },
+    {
+      "page": 14,
+      "bar": 0,
+      "loc":[0,0],
+      "time_signature": [3,4],
+      "mov":3
+    },
+    {
+      "page": 16,
+      "bar": 29,
+      "loc":[3,0],
+      "time_signature": [2,4],
+      "mov":4
+    }
+  ],
+  "numTrack": 4,
+  "track_shift": [0,0,0,0],
+  "clef_options": [[1],[1],[0],[-1,-2]]
+}
