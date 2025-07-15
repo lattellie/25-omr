@@ -3323,16 +3323,53 @@ def editBarTS(barList:List[List[Bar]], allChanges:List[dict], pageNum, numBarsPe
         for currTrack in barList:
             for barNum, bar in enumerate(currTrack):
                 bar.ts = TIME_SIGNATURE
+def exportYolo(sfnClefList:List[Accidentals|Clef], image:np.ndarray,img_name:str, barheight: int):
+    if not os.path.isdir("yolo"):
+        os.mkdir("yolo")
+    if not os.path.isdir("yolo/debug"):
+        os.mkdir("yolo/debug")
+    height, width, _ = image.shape
+    outputString = ""
+    imgg = image.copy()
+    for sfnClef in sfnClefList:
+        if type(sfnClef) == Clef:
+            if sfnClef.getValue() == 0 or sfnClef.getValue() == -2:
+                x0,y0,x1,y1 = sfnClef.boundingBox
+                if y1-x1 < 3*barheight:
+                    continue
+                cv2.rectangle(imgg, (x0,y0),(x1,y1),(0,0,255), 2, cv2.LINE_AA)
+                xPerc = (x1+x0)/2/width
+                yPerc = (y1+y0)/2/height
+                xWidth = (x1-x0)/width
+                yHeight = (y1-y0)/height
+                print(f"{1} {xPerc:.6f} {yPerc:.6f} {xWidth:.6f} {yHeight:.6f}")
+                outputString += f"{1} {xPerc:.6f} {yPerc:.6f} {xWidth:.6f} {yHeight:.6f}\n"
+        elif type(sfnClef) == Accidentals:
+            if sfnClef.getValue() == -1:
+                # is flat
+                x0,y0,x1,y1 = sfnClef.boundingBox
+                cv2.rectangle(imgg, (x0,y0),(x1,y1),(0,255,0), 2, cv2.LINE_AA)
+                xPerc = (x1+x0)/2/width
+                yPerc = (y1+y0)/2/height
+                xWidth = (x1-x0)/width
+                yHeight = (y1-y0)/height
+                print(f"{0} {xPerc:.6f} {yPerc:.6f} {xWidth:.6f} {yHeight:.6f}")
+                outputString += f"{0} {xPerc:.6f} {yPerc:.6f} {xWidth:.6f} {yHeight:.6f}\n"
+    with open(f"yolo/{img_name}.txt","w") as f:
+        f.write(outputString)
+    cv2.imwrite(f"yolo/{img_name}.jpg", image)
+    cv2.imwrite(f"yolo/debug/{img_name}.jpg",imgg)
 
 if __name__ == '__main__':
-    base_folder = 'string_dataset/pdf_data/'
-    base_output_folder = 'string_dataset/output/'
+    root_folder = 'string_dataset'
+    base_folder = f'{root_folder}/pdf_data/'
+    base_output_folder = f'{root_folder}/output/'
     pieces = []
     if not os.path.isdir(base_folder):
         os.mkdir(base_folder)
     if not os.path.isdir(base_output_folder):
         os.mkdir(base_output_folder)
-    with open('string_dataset/piecesToRun.json','r') as f:
+    with open(f'{root_folder}/piecesToRun.json','r') as f:
         pieces = json.load(f)
     for piece_name in pieces:
         OUTPUT_BASE_FOLDER = os.path.join(base_output_folder, piece_name)
@@ -3531,6 +3568,7 @@ if __name__ == '__main__':
             num_classes = 7
             sfnClassifier = Sfn_Clef_classifier(pth_path, num_classes)
             sfnClefList, sfnClefMap, debugImages = symbol_classification(dataDict, sfnClassifier, bar_height)
+            exportYolo(sfnClefList, image,img_name, bar_height)
             # {'sfnClef':sfnClefImg}
             for si in debugImages.keys():
                 outputImWrite(f'{img_name}_{si}.jpg', debugImages[si])
