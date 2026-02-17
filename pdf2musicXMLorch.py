@@ -255,6 +255,7 @@ if __name__ == '__main__':
 
     csvPath = rf"orch_dataset\tchai_4\csv\tchai_4_{number}.csv"
     jsonPath = csvPath.replace('.csv','.json')
+    imgPath = rf"orch_dataset\tchai_4\images\{number}\tchai_4_{number}.png"
     df = pd.read_csv(csvPath)
     pageMetadata = ScoreMetaData(df, jsonPath, True)
     instrumentList = ScoreMetaData.get_instruments()
@@ -269,8 +270,23 @@ if __name__ == '__main__':
         sfnClefList,
         beamMapImg,
         staffList,
+        dataDict
     ) = png2decode(f"tchai_4_{number}", rf"orch_dataset\tchai_4\images\{number}\tchai_4_{number}.png")
 
+    image = dataDict['image']
+    img = image.copy()
+    staffCenters = [sf.ys[2] for sf in staffList]
+    _,itemMap,_ = cv2.split(beamMapImg)
+    staffImgBinary = (itemMap == 4)[staffCenters,:]
+    barEachTrack = []
+    for trkRange in pageMetadata.getTrackRange():
+        staffStart = staffList[trkRange[0]].ys[0]
+        staffEnd = staffList[trkRange[1]].ys[-1]
+        barSum = np.sum(staffImgBinary[trkRange[0]:trkRange[1],:],axis=0)
+        barPos = np.where(barSum>(trkRange[1]-trkRange[0])*0.5)
+        img[staffStart:staffEnd, barPos] = (0,0,255)
+        barEachTrack.append(barPos)
+        
     # get Barline locations -> bar center for each track: List[List[int]]
     # get the list of 
     print()

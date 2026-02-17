@@ -1975,7 +1975,7 @@ def png2decode(img_name: str, img_path: str):
 
     beamMapImg,noteGroupMap = extendNotegroupsToStaff(noteGroupMap, noteGroupVerticallyMerged,staffObjList,beamMapImg)
 
-    return noteGroupMap, stemIdxMap, noteGroupVerticallyMerged, restMap,restList,sfnClefMap,sfnClefList,beamMapImg,staffObjList
+    return noteGroupMap, stemIdxMap, noteGroupVerticallyMerged, restMap,restList,sfnClefMap,sfnClefList,beamMapImg,staffObjList, dataDict
 
 
 if __name__ == '__main__':
@@ -1999,4 +1999,5 @@ if __name__ == '__main__':
         sfnClefList,
         beamMapImg,
         staffList,
+        dataDict
     ) = png2decode("tchai_4_001", r"orch_dataset\tchai_4\images\001\tchai_4_001.png")
