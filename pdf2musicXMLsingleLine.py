@@ -15,7 +15,7 @@ import math
 from get_prediction_singleStem import Single_Stem_Classifier
 from omr.bbox import (
     BBox,
-    merge_nearby_bbox,
+    merge_nearby_bbox, 
 )
 import json
 import math
@@ -31,8 +31,7 @@ from pdf2png import savePdf2Png
 import pickle
 import itertools
 
-OUTPUT_BASE_FOLDER = 'string_dataset/output/beethoven'
-
+OUTPUT_BASE_FOLDER = ''
 NUM_TRACK = 4
 TRACK_SHIFT = [0,0,0,0]
 CLEF_OPTIONS = [[1],[1],[0,1],[-1,-2,1]]
@@ -435,16 +434,21 @@ def printt(str):
         print(str)
 
 debugImg = False
-# def imwrite(str,img,strictlyYes=False, startingFolder = 'test_images/'):
+
 def imwrite(str,img,strictlyYes=False, startingFolder = f'{OUTPUT_BASE_FOLDER}/'):
-# def imwrite(str,img,strictlyYes=False, startingFolder = ''):
+    debugFolderPath = f'{startingFolder}debug'
+    if not os.path.exists(debugFolderPath):
+        os.mkdir(debugFolderPath)
     if debugImg or strictlyYes:
         print(f'saving {str}')
-        cv2.imwrite(f'{startingFolder}debug/{str}',img)
-# def outputImWrite(str,img,rootFolder='test_images/output'):
-# def outputImWrite(str,img,rootFolder='output_images'):
-def outputImWrite(str,img):
-    cv2.imwrite(f'{OUTPUT_BASE_FOLDER}/output/{str}',img)
+        cv2.imwrite(f'{debugFolderPath}/{str}',img)
+
+
+def outputImWrite(str,img, startingFolder = f'{OUTPUT_BASE_FOLDER}/'):
+    outputImgPath = f'{startingFolder}output'
+    if not os.path.exists(outputImgPath):
+        os.mkdir(outputImgPath)
+    cv2.imwrite(f'{outputImgPath}/{str}',img)
 
 # barline_height = 12
 
@@ -2086,7 +2090,6 @@ def assignRestDots(restList:List[Rest], beamMapImg:np.ndarray, noteGroupStemMap:
                 rs.hasdot = True
     imwrite('dotRestBox.jpg',imgbgr)
     return restList,{'dotRestBox':imgbgr}
-
 def getNoteChunks(image: np.ndarray, noteGroupMap:np.ndarray, beamMapImg:np.ndarray, noteGroupVerticallyMerged:List[NoteGroup]):
     imgrgb = image.copy()
     beamBinary = np.zeros((beamMapImg.shape[0],beamMapImg.shape[1]))
@@ -3402,7 +3405,7 @@ if __name__ == '__main__':
         lineNoList: List[int] = []
         allBarBreakPoints: List[int] = []
         for imgIdx,img_name in enumerate(img_name_list):
-            minBarheight = 8
+            MIN_BAR_HEIGHT = 8
             img_path = f"{run_img_folder}/{img_name}/{img_name}.png"
             base_path = f"{run_img_folder}/{img_name}/{img_name}"
             npy_path = f"{run_img_folder}/{img_name}/{img_name}.npy"
@@ -3417,20 +3420,10 @@ if __name__ == '__main__':
                 staffListOrigin = runModel2(npy_path, img_path, base_path)
             if os.path.exists(npy_path) and os.path.exists(pkl_path):
                 printt(f"working on {img_path}")
-            # if os.path.exists(beamMapImg_path): # beamMap for the rr in accidentals
-            #     beamMapImg = cv2.imread(beamMapImg_path)
-            #     with open(barList_path, "rb") as f:
-            #         barLists = pickle.load(f)
-            #     for tr in range(NUM_TRACK):
-            #         wholeBarList[tr] += barLists[tr]
-            #     beamRefList += [imgIdx]*len(barLists[0])
-            #     lineNoList += [i for i in range(len(barLists[0]))]
-            #     allBeamMaps.append(beamMapImg)
-            #     continue
-            # '''
             dataDict = np.load(npy_path,allow_pickle=True)
             dataDict = dataDict.tolist()
             resize_ratio = 2
+            # the minimum pixel height between staffline should be higher than 8 to ensure proper processing of image
             if img_name.startswith('packed_'):
                 for k in dataDict.keys():
                     img = dataDict[k]
@@ -3456,7 +3449,7 @@ if __name__ == '__main__':
             imwrite(f'symbols_.jpg', img)
 
             # ori_img, binary_img, symbol = getStemBox(dataDict)
-            bar_height, staffObjList = init_bar_height(dataDict, min_barheight=minBarheight)
+            bar_height, staffObjList = init_bar_height(dataDict, min_barheight=MIN_BAR_HEIGHT)
             print(f'barheight: {bar_height}')
             print(bar_height)
             stepSize = int(bar_height/4)
@@ -3677,8 +3670,8 @@ if __name__ == '__main__':
             beamMapImg,noteGroupMap = extendNotegroupsToStaff(noteGroupMap, noteGroupVerticallyMerged,staffObjList,beamMapImg)
             barList, barRanges, numBarsPerLine = constructBar(noteGroupMap, stemIdxMap, noteGroupVerticallyMerged, restMap,restList,sfnClefMap,sfnClefList,beamMapImg,staffObjList)
             # maskImg, tsBoxes, tsBoxesFiltered, debugImages = createMask(barList, barRanges, staffObjList, image, beamMapImg)
-            # for si in debugImages.keys():
-            #     outputImWrite(f'{img_name}_{si}.jpg', debugImages[si])
+            for si in debugImages.keys():
+                outputImWrite(f'{img_name}_{si}.jpg', debugImages[si])
             # saveBarToCsv(img_name, barList, desiredLengtdh=1)
             # trackNo = 1
             # if img_wholename in is2:
