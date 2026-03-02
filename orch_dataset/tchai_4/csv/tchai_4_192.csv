@@ -1,0 +1,20 @@
+page,staff,system,staffgroup,num_ins,ens,ins1,part1,tone1,ins2,part2,tone2,ins3,part3,tone3,ocr,page_norm,family
+192,1,1,1,,,piccolo,,,,,,,,,Picc.,192,Woodwind
+192,2,1,1,,,flute,,,,,,,,,Fl.,192,Woodwind
+192,3,1,1,,,oboe,,,,,,,,,Ob.,192,Woodwind
+192,4,1,1,,,clarinet,,B flat,,,,,,,Cl. (B♭),192,Woodwind
+192,5,1,1,,,bassoon,,,,,,,,,Fg.,192,Woodwind
+192,6,1,2,2,,horn,1,F,horn,2,F,,,,1-2 Cor. (F),192,Brass
+192,7,1,2,2,,horn,3,F,horn,4,F,,,,3-4 Cor. (F),192,Brass
+192,8,1,2,,,trumpet,,F,,,,,,,Tr. (F),192,Brass
+192,9,1,2,2,,trombone,1,,trombone,2,,,,,1-2 Trb.,192,Brass
+192,10,1,2,2,,trombone,3,,tuba,,,,,,3 e Tba.,192,Brass
+192,11,1,3,,,timpani,,,,,,,,,Timp.,192,Percussion
+192,12,1,3,,,triangle,,,,,,,,,Trg.,192,Percussion
+192,13,1,3,,,cymbals,,,,,,,,,Ptti,192,Percussion
+192,14,1,3,,,bass drum,,,,,,,,,G.C.,192,Percussion
+192,15,1,4,,,violin,1,,,,,,,,Vl. I,192,Strings
+192,16,1,4,,,violin,2,,,,,,,,Vl. II,192,Strings
+192,17,1,4,,,viola,,,,,,,,,Vla.,192,Strings
+192,18,1,4,,,cello,,,,,,,,,Vlc.,192,Strings
+192,19,1,4,,,bass,,,,,,,,,Cb.,192,Strings

@@ -1,0 +1,16 @@
+page,staff,system,staffgroup,num_ins,ens,ins1,part1,tone1,ins2,part2,tone2,ins3,part3,tone3,ocr,page_norm,family
+001,1,1,1,,,flute,,,,,,,,,FLAUTI,001,Woodwind
+001,2,1,1,,,oboe,,,,,,,,,OBOI,001,Woodwind
+001,3,1,1,,,clarinet,,B flat,,,,,,,CLARINETTI in B♭ Si♭,001,Woodwind
+001,4,1,1,,,bassoon,,,,,,,,,FAGOTTI,001,Woodwind
+001,5,1,2,2,,horn,1,F,horn,2,F,,,,CORNI in F Fa 1-2,001,Brass
+001,6,1,2,2,,horn,3,F,horn,4,F,,,,CORNI in F Fa 3-4,001,Brass
+001,7,1,2,,,trumpet,,F,,,,,,,TROMBE in F Fa,001,Brass
+001,8,1,2,2,,trombone,1,,trombone,2,,,,,TROMBONI 1-2,001,Brass
+001,9,1,2,2,,trombone,3,,tuba,,,,,,TROMBONE 3 e TUBA,001,Brass
+001,10,1,3,3,,timpani,,F,timpani,,C,timpani,,A,TIMPANI in F - C - A Fa - Do - La,001,Percussion
+001,11,1,4,,,violin,1,,,,,,,,VIOLINO I,001,Strings
+001,12,1,4,,,violin,2,,,,,,,,VIOLINO II,001,Strings
+001,13,1,4,,,viola,,,,,,,,,VIOLA,001,Strings
+001,14,1,4,,,cello,,,,,,,,,VIOLONCELLO,001,Strings
+001,15,1,4,,,bass,,,,,,,,,CONTRABASSO,001,Strings
