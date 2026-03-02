@@ -354,6 +354,16 @@ class Bar:
         self.ts = TS
         self.elementList:List[Accidentals|Clef|Rest|NoteGroup] = []
         self.restNgList:List[RestNg] = []
+    def assignEmptyBar(self):
+        rng = RestNg(length=Fraction(self.ts[0], self.ts[1]),
+                                groupId = -1,
+                                isRest = True,
+                                numNotes = 0,
+                                beamLength = (-1,-1),
+                                beamEnd=[-1,-1])
+        emptyRest = Rest([-1,-1,-1,-1], -1)
+        self.elementList.append(emptyRest)
+        self.restNgList.append(rng)
     def getString(self):
         retStr = []
         for elem in self.elementList:
