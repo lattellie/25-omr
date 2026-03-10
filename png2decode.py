@@ -866,7 +866,7 @@ def knnRhythmAndDraw(stem_list_assigned:List[Stem], beam_heights, image, bar_hei
                 # if kmeans.labels_[currentCount] == 0:
                 #     break
                 if (x1-x0)*(y1-y0)<minSize:
-                    # TODO !!! potentially will filter out the big notes that are grouped to small ones
+                    # TODO potentially will filter out the big notes that are grouped to small ones
                     for stem in ng.noteStemList:
                         stem.isOrnament = True
                     stmToRemove.append(stemId)
@@ -1362,7 +1362,7 @@ def assignPitch(image:np.ndarray, noteGroupList:List[NoteGroup|None], beamMapImg
             ccNozero = [c for c in cc if c>0]
             maxIdx = [i for i in range(len(ccNozero)) if ccNozero[i]==max(ccNozero)]
             # center that was tilted and thick
-            if (maxIdx[0]>len(ccNozero)/2 and maxIdx[0]<len(ccNozero)*0.)or (maxIdx[-1]<len(ccNozero)/2 and maxIdx[-1]>len(ccNozero)*0.8) and maxIdx[-1]-maxIdx[0]>=3: # TODO!!!
+            if (maxIdx[0]>len(ccNozero)/2 and maxIdx[0]<len(ccNozero)*0.)or (maxIdx[-1]<len(ccNozero)/2 and maxIdx[-1]>len(ccNozero)*0.8) and maxIdx[-1]-maxIdx[0]>=3: # TODO
                 stemObj.hasLineMiddle = True
                 pitchLineImg=cv2.rectangle(pitchLineImg,(xx0, y0+maxIdx[0]),(xx1, y0+maxIdx[-1]),(255,0,255), 2, cv2.LINE_AA)
             # center
@@ -1902,6 +1902,10 @@ def png2decode(img_name: str, img_path: str):
     outputDebugSymbolsImg(dataDict) # generate symbols_ in debug
 
     bar_height, staffObjList = init_bar_height(dataDict, min_barheight=MIN_BAR_HEIGHT)
+    # !!! 五線譜
+    # staff.left & staff.right: 五線譜開始/結束的位置
+    # staff.ys: [y0, y1, y2, y3, y4] 五線譜每行的中心位置
+    # !!! add csv decoding for instruments here
     print(f'barheight: {bar_height}')
     print(bar_height)
     stepSize = int(bar_height/4)
@@ -2001,3 +2005,5 @@ if __name__ == '__main__':
         staffList,
         dataDict
     ) = png2decode("tchai_4_001", r"orch_dataset\tchai_4\images\001\tchai_4_001.png")
+
+# 五線譜位置 ()

@@ -135,6 +135,50 @@ def getBarsEachTrack(image:np.ndarray, beamMapImg:np.ndarray, staffList:List[Sta
     imwrite("barForTracks.jpg", img)
     return barEachTrack
 
+
+def getAllObjectInEachLine(
+        noteGroupMap: np.ndarray,
+        noteGroupVerticallyMerged: List[NoteGroup | None],
+        restMap: np.ndarray,
+        restList: List[Rest | None],
+        sfnClefMap: np.ndarray,
+        sfnClefList: List[Union[Accidentals, Clef, None]],
+        beamMapImg: np.ndarray,
+        staffList: List[Staff]
+    ):
+    _, objMap, _ = cv2.split(beamMapImg)
+    mapForMatching:List[np.ndarray|None] = [None,noteGroupMap,sfnClefMap, sfnClefMap, None, restMap]
+    listForMatching:List[List] = [None, noteGroupVerticallyMerged,sfnClefList, sfnClefList, None, restList]
+    allItems = []
+    for sf in staffList:
+        allItemInLine = []
+        currX = sf.left
+        while currX < sf.right:
+            lineLst = np.unique(objMap[sf.ys[0]-sf.get_yOne():sf.ys[-1]+sf.get_yOne(), currX]).tolist()
+            if 0 in lineLst:
+                lineLst.remove(0)
+            if len(lineLst)>1:
+                for i in [1,5,3,2]:
+                    if i in lineLst:
+                        lineLst = [i]
+                        break
+            if len(lineLst) == 0 or 4 in lineLst:
+                currX += 1
+            else:
+                typeId = lineLst[0]
+                currMap = mapForMatching[typeId]
+                currLst = listForMatching[typeId]
+                inMapId = np.unique(currMap[sf.ys[0]-sf.get_yOne():sf.ys[-1]+sf.get_yOne(), currX]).tolist()
+                if 0 in inMapId:
+                    inMapId.remove(0)
+                if (len(inMapId) == 1):
+                    allItemInLine.append(currLst[inMapId[0]])
+                    currX = currLst[inMapId[0]].boundingBox[2]+1
+                else:
+                    currX += 1
+        allItems.append(allItemInLine)
+    return allItems
+
 def constructBar(noteGroupMap:np.ndarray, 
                    noteGroupVerticallyMerged: List[NoteGroup|None],
                    restMap: np.ndarray,
@@ -886,6 +930,7 @@ if __name__ == '__main__':
     pageMetadata = ScoreMetaData(df, jsonPath, True)
     instrumentList = ScoreMetaData.get_instruments()
 
+    # # actual use
     # (
     #     noteGroupMap,
     #     stemIdxMap,
@@ -898,7 +943,8 @@ if __name__ == '__main__':
     #     staffList,
     #     dataDict
     # ) = png2decode(f"tchai_4_{number}", rf"orch_dataset\tchai_4\images\{number}\tchai_4_{number}.png")
-
+    
+    # to save time running previous step (Debug only)
     with open("processedData.pkl", "rb") as f:
         (
             noteGroupMap,
@@ -912,6 +958,12 @@ if __name__ == '__main__':
             staffList,
             dataDict
         ) = pickle.load(f)
+
+    # !!! decoded stuff from score (by bar)
+    # !!! note object by staff line (object not just decoded)
+    allItemInScore = getAllObjectInEachLine(noteGroupMap, noteGroupVerticallyMerged, restMap, restList, sfnClefMap, sfnClefList, beamMapImg, staffList)
+
+        
     image = dataDict['image']
     # get Barline locations -> bar center for each track: List[List[int]]
     barEachTrack = getBarsEachTrack(image, beamMapImg, staffList)
@@ -955,3 +1007,37 @@ if __name__ == '__main__':
 
 # todo:
 # Timpani only use one row
+
+
+        # current data structure documentation: 
+        # noteChunkList: list of None|NoteChunks 
+        #   by noteChunkList[n].noteGroupIdxs you can get the Ids of them
+        # noteGroupMap, stemIdxMap <-> noteGroupVerticallyMerged
+        #   noteGroupMap value == 0: no note, 
+        #   >0: is the noteGroupVerticallyMerged[idx]
+        #   stemIdxMap value == -1: no noteBox
+        #   >=0: is the index of noteGroupVerticallyMerged[idx].noteStemList[index]
+        # restMap <-> restList
+        #   RestMap value == 0: no rest
+        #   >0: is the restList[idx]
+        # sfnClefMap <-> sfnClefList
+        #   sfnClefMap value == 0: no clef/sfn
+        #   >0: is the sfnClefList[idx]
+        # beamMapImg: bb,gg,rr 
+        #   bb: the gradient beam image, 255 where there's beam, 
+        #       254-2*stepSize*n: go how far down to beam 
+        #       253-2*stepSize*n: go how far up to beam 
+        #   gg: 0 if there's nothing there
+        #       1 if it's place of a noteGroup object
+        #       2 if it's place of an accidentals
+        #       3 if it's place of a clef
+        #       4 if it's place of a barline 
+        #       5 if it's place of a rest
+        #       6 if it's place of a noteGroup ornament? TODO not implemented yet
+        #   rr: staff position map + staff number + how far to the bottom of staff
+        #       x = 0~3 (total of 4): the position of the note (1~24, A is 12, C is 13) 
+        #       x = 4: the staffnum of the closest one (starting with 1 instead of 0)
+        #       x = -1: how far pixel to the top of the staff (if it's in the staff range and 1 barheight above, else 0) 
+        #       x = -2: how far pixel to the bottom of the staff (if it's in the staff range and 1 barheight below, else 0) 
+        #       within the x of staff: the staff number
+        #           if it contains anything in the staff it will be that, else it will 
