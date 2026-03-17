@@ -34,8 +34,8 @@ def savePdf2Png(root_folder:str, numPngPerPage:int, rotate:bool):
                 image.save(newroute, 'PNG')
                 print(f"image {imgNum} saved to {newroute}")
                 imgNum = imgNum+1
-# if __name__ == '__main__':
-#     savePdf2Png('string_dataset/pdf_data/beethoven1',1,False)
+if __name__ == '__main__':
+    savePdf2Png('orch_dataset/Bee_1_challenge10page',1,False)
 
 
 # # Path to the PDF file

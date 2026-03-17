@@ -29,20 +29,23 @@ class ScoreMetaData:
         self.pdFrame: pd.DataFrame = pd_frame
         self.trackRange: List[Tuple[int,int]] = []
         self.groupingRange: List[List[Tuple[int,int]]] = []
+        for i in range(1,4):
+            df[f"combined{i}"] = (
+                df[f"ins{i}"]
+                + df[f"part{i}"].apply(lambda x: "" if pd.isna(x) else '__'+str(int(x)))
+                + df[f"tone{i}"].apply(lambda x: "" if pd.isna(x) else ':'+x)
+            ) # 'clarinet_1:B flat'
+        # special case for timpani
+        mask = df["ins1"] == "timpani"
+        df.loc[mask, "combined1"] = "timpani"
+        df.loc[mask, ["combined2", "combined3"]] = np.nan
         if initInstruments:
-            for i in range(1,4):
-                df[f"combined{i}"] = (
-                    df[f"ins{i}"]
-                    + df[f"part{i}"].apply(lambda x: "" if pd.isna(x) else '_'+str(int(x)))
-                    + df[f"tone{i}"].apply(lambda x: "" if pd.isna(x) else ':'+x)
-                ) # 'clarinet_1:B flat'
             df_filtered = df[['combined1', 'combined2','combined3']][df['system'] == 1]
             instrument_list = [str(x) for x in df_filtered.to_numpy().flatten() if pd.notna(x)]
             self.set_instruments(instrument_list)
             with open(self.jsonPath, "w", encoding="utf-8") as f:
                 json.dump(instrument_list, f, ensure_ascii=False, indent=2)
-
-        elif os.path.exists(self.jsonPath) and self.get_instruments == []:
+        elif os.path.exists(self.jsonPath) and self.get_instruments() == []:
             with open(self.jsonPath, "r", encoding="utf-8") as f:
                 instrument_list = json.load(f)
                 self.set_instruments(instrument_list)
@@ -94,11 +97,24 @@ class ScoreMetaData:
         strList = self.getInstrumentEachTrack()
         insList = self.get_instruments()
         return [[insList.index(r) for r in row] for row in strList]
+    
+    # get the number of track that line belongs to
     def getTrackForLineIdx(self, lineIdx: int) -> int:
         for i, (start, end) in enumerate(self.trackRange):
             if start <= lineIdx <= end:
                 return i
         return -1
+    
+    # get the line number of that line inside that track. 
+    # let's say [3,6] are the 2nd group (inclusive), then 
+    #   fn(3) -> (1,0), 2nd group(count starts at 0), index 0
+    #   fn(6) -> (1,3), 2nd group, index 3
+    def getTrackIdxForLineIdx(self, lineIdx: int) -> Tuple[int,int]:
+        for i, (start, end) in enumerate(self.trackRange):
+            if start <= lineIdx <= end:
+                return (i, lineIdx - start)
+        return (-1,-1)
+
 
     # static
     @classmethod
@@ -281,8 +297,10 @@ def constructBar(noteGroupMap:np.ndarray,
                         currX+=1
                         print("has more than 1 id")
             currBarList.append(bar)
-        
-        nextIdx = np.max(np.unique(np.where(gg[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), rng[1]:]>0)[1]))
+        notfinishedBarStuff = np.where(gg[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), rng[1]:]>0)[1]
+        nextIdx = 0
+        if len(notfinishedBarStuff) > 0:
+            nextIdx = np.max(np.unique(np.where(gg[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), rng[1]:]>0)[1]))
         if nextIdx>5:
             rng = (isBar[-1]+sf0.left+1, rng[1]+nextIdx)
             bar = Bar(currTS)
@@ -373,17 +391,50 @@ def assignBarlistInstrument(barList:List[List[Bar]], pageMetadata:ScoreMetaData)
     def getEmptyBarDefaultList(barTrack: List[Bar]):
         return [Bar(b.ts) for b in barTrack]
 
+    from collections import defaultdict
+
+    def build_grouped_lookup(instrument_list):
+        grouped = defaultdict(list)
+        for item in instrument_list:
+            if ":" in item:
+                base, suffix = item.split(":", 1)
+                key_suffix = ":" + suffix
+            else:
+                base = item
+                key_suffix = ""
+            base_name = base.split("__")[0]
+            key = base_name + key_suffix
+            grouped[key].append(item)
+        return dict(grouped)
+    from collections import defaultdict
+
+    def build_instrument_lookup_no_section(instrument_list):
+        grouped = defaultdict(list)
+        for item in instrument_list:
+            base = item.split(":", 1)[0]
+            base_name = base.split("__")[0]
+            grouped[base_name].append(item)
+        return dict(grouped)
+    def getInstruments(instrumentLookup: dict, instrumentLookupNoSec: dict, ins: str):
+        if instrumentLookup.get(ins):
+            return instrumentLookup.get(ins)
+        if instrumentLookupNoSec.get(ins):
+            return instrumentLookupNoSec.get(ins)
+        return [ins]
     for trackLineIdx, currTrackRange in enumerate(trackRange):
-        instrumentList = ScoreMetaData.get_instruments()
         startIdx = currTrackRange[0]
         endIdx = currTrackRange[1]+1
+        instrumentList = ScoreMetaData.get_instruments()
+        instrumentLookup = build_grouped_lookup(instrumentList)
+        instrumentLookupNoSec = build_instrument_lookup_no_section(instrumentList)
         for i in range(startIdx, endIdx):
-            instrumentInThisLine = instrumentTrack[i]
+            instrumentInThisLineList = [getInstruments(instrumentLookup,instrumentLookupNoSec,ins) for ins in instrumentTrack[i]]
+            instrumentInThisLine = [item for sublist in instrumentInThisLineList for item in sublist]
             for ins in instrumentInThisLine:
                 if trackLineIdx == 0:
                     retBarList[ins] = list(barList[i])
                 else:
-                    retBarList[ins] += barList[i]
+                    retBarList[ins] += barList[i] 
                 if ins in instrumentList:
                     instrumentList.remove(ins)
                 else:
@@ -393,10 +444,91 @@ def assignBarlistInstrument(barList:List[List[Bar]], pageMetadata:ScoreMetaData)
                 retBarList[resIns] = getEmptyBarDefaultList(barList[startIdx])
             else:
                 retBarList[resIns] += getEmptyBarDefaultList(barList[startIdx])
+    assert len(np.unique([len(b) for b in barList])) == 1
     return retBarList
-def exportXML(barList:List[List[Bar]], numTrack:int, 
+
+# return (1) ksMat for each track (exactly as how it's presented visually), metric of [number of lines, bars]
+#        (2) the keySignature of each track (concert pitch) as an array
+def getKSMatAndKSList(pageMetadata: ScoreMetaData, barList: List[List[Bar]]):
+    oneInstrumentEachLine = [i[0] for i in pageMetadata.getInstrumentEachTrack()]
+    trackShiftEachLine = []
+    for tn in oneInstrumentEachLine:
+        if 'B flat' in tn:
+            trackShiftEachLine.append(2)
+        elif 'F' in tn:
+            trackShiftEachLine.append(4)
+        else:
+            trackShiftEachLine.append(0)
+    ksBarMatForEachTrack = []
+    ksBarShiftForEachTrack = []
+    trackRanges = pageMetadata.getTrackRange()
+    for trackRange in trackRanges:
+        numTrack = trackRange[1]-trackRange[0] + 1 # inclusive of the start and end
+        numBars = len(barList[trackRange[0]])
+        ksBarMat = np.ones((numTrack, numBars))*np.inf
+        ksBarMatForEachTrack.append(ksBarMat)
+        ksBarShift = np.array(trackShiftEachLine[trackRange[0]:trackRange[1]+1])[:, None] * np.ones(numBars)
+        ksBarShiftForEachTrack.append(ksBarShift)
+    def checkAndAssignKS(
+            prevIsAcc: bool, 
+            new_elements: List[Accidentals|Clef|Rest|NoteGroup|KeySignature], 
+            accumulatedAccidentals: List[KeySignature],
+            trackGroupNo: int, 
+            lineOfThatTrackNo: int, 
+            barNo: int,
+            ksBarMatForEachTrack: List[np.ndarray]):
+        if prevIsAcc:
+            newKS = KeySignature(accumulatedAccidentals)
+            new_elements.append(newKS)
+            ksBarMatForEachTrack[trackGroupNo][lineOfThatTrackNo][barNo] = newKS.getSharpFlatInt()
+            accumulatedAccidentals = []
+        return new_elements, accumulatedAccidentals, ksBarMatForEachTrack
+    # return the list of concert pitch keySignature for each bar (inf: no signature)
+    def modeKSForAllTrack(ksMat:np.ndarray):
+        result = []
+        for col in ksMat.T:
+            finite_vals = col[~np.isinf(col)]  # remove infs
+            if finite_vals.size == 0:
+                result.append(np.inf)  # all were inf
+            else:
+                values, counts = np.unique(finite_vals, return_counts=True)
+                result.append(values[np.argmax(counts)])
+        return np.array(result)
+    for (lineNo, oneLine) in enumerate(barList):
+        # the line #lineOfThatTrackNo of the track #trackGroupNo
+        trackGroupNo, lineOfThatTrackNo = pageMetadata.getTrackIdxForLineIdx(lineNo)
+        for (barNo, oneBar) in enumerate(oneLine):
+            accumulatedAccidentals = []
+            new_elements = []
+            prevIsAcc = False
+            for elem in oneBar.elementList:
+                if isinstance(elem, Accidentals) and elem.isKeySignature:
+                    accumulatedAccidentals.append(elem)
+                    prevIsAcc = True
+                else:
+                    new_elements, accumulatedAccidentals, ksBarMatForEachTrack = checkAndAssignKS(prevIsAcc, new_elements, accumulatedAccidentals, trackGroupNo, lineOfThatTrackNo, barNo, ksBarMatForEachTrack)
+                    new_elements.append(elem)
+                    prevIsAcc = False
+            new_elements, accumulatedAccidentals, ksBarMatForEachTrack = checkAndAssignKS(prevIsAcc, new_elements, accumulatedAccidentals, trackGroupNo, lineOfThatTrackNo, barNo, ksBarMatForEachTrack)
+            # assign the basic to 0 if there's no changes
+            if barNo == 0 and ksBarMatForEachTrack[trackGroupNo][lineOfThatTrackNo][barNo] == np.inf:
+                ksBarMatForEachTrack[trackGroupNo][lineOfThatTrackNo][barNo] = 0
+            oneBar.elementList = new_elements
+    # now ksBarMatForEachTrack is exactly what we see on the score
+    ksEachTrack = []
+    ksMatEachTrackSameAsVisual = []
+    for idx in range(len(ksBarMatForEachTrack)):
+        ksBarMatShifted = ksBarMatForEachTrack[idx]-ksBarShiftForEachTrack[idx]
+        modeKSArray = modeKSForAllTrack(ksBarMatShifted)
+        ksEachTrack.append(modeKSArray)
+        ksMatEachTrackSameAsVisual.append(np.tile(modeKSArray, (ksBarMatForEachTrack[idx].shape[0],1)) + ksBarShiftForEachTrack[idx])
+    return ksMatEachTrackSameAsVisual, ksEachTrack, barList
+
+def exportXML(barList:List[List[Bar]], 
+              numTrack:int, 
               TRACK_SHIFT: List[int],
               CLEF_OPTIONS: List[List[int]],
+              ksListAllTrack: np.ndarray, # array([-4., inf, inf, inf, inf, inf, 2, inf, inf])
               image:np.ndarray|None = None, 
               beamMapImg:np.ndarray|None = None,
               barsBreakPoints: List[int] = [0],
@@ -701,7 +833,6 @@ def exportXML(barList:List[List[Bar]], numTrack:int,
         else:
             return None
     numBars = len(barList[0])
-    ksBarMat = np.ones((numTrack, numBars))*np.inf
     clefMat = np.ones((numTrack, numBars))*np.inf 
     currentClef = [None]*numTrack
     for currBarNumber in range(numBars):
@@ -722,97 +853,13 @@ def exportXML(barList:List[List[Bar]], numTrack:int,
                     else:
                         clefMat[lineNo, currBarNumber] = clefMat[lineNo, currBarNumber-1]
     global DEBUGIMG
-    beamMapRefIndex = -1
-    for currBarNumber in range(numBars):
-        if beamMapRefList is not None:
-            if beamMapRefList[currBarNumber] != beamMapRefIndex:
-                beamMapRefIndex = beamMapRefList[currBarNumber]
-                beamMapImg = beamMapList[beamMapRefIndex]
-                bb,gg,rr = cv2.split(beamMapImg)
-        barNumber = currBarNumber+1
-        for lineNo in range(len(barList)):
-            currBar = barList[lineNo][currBarNumber]
-            accumAcc: List[Accidentals] = [] # will have the list of accidentals to process    
-            for elem in currBar.elementList:
-                if type(elem) == Accidentals:
-                    if lineNoList is not None:
-                        currAcc = parseAccidentals(elem,lineNoList[currBarNumber]) # return none if it's accidentals
-                    else:
-                        currAcc = parseAccidentals(elem, lineNo)
-                    if currAcc is None:
-                        if debugXMLImg is not None:
-                            x0,y0,x1,y1 = elem.boundingBox
-                            debugXMLImg = cv2.rectangle(debugXMLImg, (x0,y0),(x1,y1),elem.getColor(), 1, cv2.LINE_AA)
-                            DEBUGIMG = cv2.rectangle(DEBUGIMG, (x0,y0),(x1,y1),elem.getColor(), 1, cv2.LINE_AA)
-                        if len(accumAcc)>0:
-                            ksCurr = assignKsCurrClef(accumAcc, clefMat[lineNo, currBarNumber])
-                            if ksCurr is None:
-                                for ac in accumAcc:
-                                    x0,y0,x1,y1 = ac.boundingBox
-                                    debugXMLImg = cv2.circle(debugXMLImg, ((x0+x1)//2, (y0+y1)//2), (x1-x0)//2, ac.getColor(), 3, cv2.LINE_AA)
-                                    DEBUGIMG = cv2.circle(DEBUGIMG, ((x0+x1)//2, (y0+y1)//2), (x1-x0)//2, ac.getColor(), 3, cv2.LINE_AA)
-                                if barNumber == 1:
-                                    modShift = statistics.mode([a.shift for a in accumAcc])
-                                    currentKs[lineNo%numTrack] = modShift*len(accumAcc)
-                                    ksBarMat[lineNo, currBarNumber] = modShift*len(accumAcc)    
-                                    debugXMLImg = cv2.putText(debugXMLImg,str(modShift*len(accumAcc)), (x1,y1), cv2.FONT_HERSHEY_SIMPLEX, 0.7, ac.getColor(), 2, cv2.LINE_AA)
-                                    DEBUGIMG = cv2.putText(DEBUGIMG,str(modShift*len(accumAcc)), (x1,y1), cv2.FONT_HERSHEY_SIMPLEX, 0.7, ac.getColor(), 2, cv2.LINE_AA)
-                            else:
-                                for ac in accumAcc:
-                                    x0,y0,x1,y1 = ac.boundingBox
-                                    debugXMLImg = cv2.rectangle(debugXMLImg, (x0,y0),(x1,y1),ac.getColor(), 3, cv2.LINE_AA)
-                                    DEBUGIMG = cv2.rectangle(DEBUGIMG, (x0,y0),(x1,y1),ac.getColor(), 3, cv2.LINE_AA)
-                                debugXMLImg = cv2.putText(debugXMLImg,str(ksCurr), (x1,y1), cv2.FONT_HERSHEY_SIMPLEX, 0.7, ac.getColor(), 2, cv2.LINE_AA)
-                                DEBUGIMG = cv2.putText(DEBUGIMG,str(ksCurr), (x1,y1), cv2.FONT_HERSHEY_SIMPLEX, 0.7, ac.getColor(), 2, cv2.LINE_AA)
-                            if ksCurr is not None and ksCurr != currentKs[lineNo%numTrack]:
-                                currentKs[lineNo%numTrack] = ksCurr
-                                ksBarMat[lineNo, currBarNumber] = ksCurr
-                    elif currAcc.endKeySignature:
-                        accumAcc.append(currAcc)
-                        ksCurr = assignKsCurrClef(accumAcc, clefMat[lineNo, currBarNumber])
-                        if ksCurr is None:
-                            for ac in accumAcc:
-                                x0,y0,x1,y1 = ac.boundingBox
-                                debugXMLImg = cv2.circle(debugXMLImg, ((x0+x1)//2, (y0+y1)//2), (x1-x0)//2, ac.getColor(), 3, cv2.LINE_AA)
-                                DEBUGIMG = cv2.circle(DEBUGIMG, ((x0+x1)//2, (y0+y1)//2), (x1-x0)//2, ac.getColor(), 3, cv2.LINE_AA)
-                            if barNumber == 1:
-                                modShift = statistics.mode([a.shift for a in accumAcc])
-                                currentKs[lineNo%numTrack] = modShift*len(accumAcc)
-                                ksBarMat[lineNo, currBarNumber] = modShift*len(accumAcc)
-                                debugXMLImg = cv2.putText(debugXMLImg,str(modShift*len(accumAcc)), (x1,y1), cv2.FONT_HERSHEY_SIMPLEX, 0.7, ac.getColor(), 2, cv2.LINE_AA)
-                                DEBUGIMG = cv2.putText(DEBUGIMG,str(modShift*len(accumAcc)), (x1,y1), cv2.FONT_HERSHEY_SIMPLEX, 0.7, ac.getColor(), 2, cv2.LINE_AA)
-                        else:
-                            for ac in accumAcc:
-                                x0,y0,x1,y1 = ac.boundingBox
-                                debugXMLImg = cv2.rectangle(debugXMLImg, (x0,y0),(x1,y1),ac.getColor(), 3, cv2.LINE_AA)
-                                DEBUGIMG = cv2.rectangle(DEBUGIMG, (x0,y0),(x1,y1),ac.getColor(), 3, cv2.LINE_AA)
-                            debugXMLImg = cv2.putText(debugXMLImg,str(ksCurr), (x1,y1), cv2.FONT_HERSHEY_SIMPLEX, 0.7, ac.getColor(), 2, cv2.LINE_AA)
-                            DEBUGIMG = cv2.putText(DEBUGIMG,str(ksCurr), (x1,y1), cv2.FONT_HERSHEY_SIMPLEX, 0.7, ac.getColor(), 2, cv2.LINE_AA)
-                        if ksCurr is not None and ksCurr != currentKs[lineNo%numTrack]:
-                            currentKs[lineNo%numTrack] = ksCurr
-                            ksBarMat[lineNo, currBarNumber] = ksCurr
-                    else:
-                        accumAcc.append(currAcc)
-            if len(accumAcc)>0:
-                ksCurr = assignKsCurrClef(accumAcc, clefMat[lineNo, currBarNumber])
-                if ksCurr is not None:
-                    currentKs[lineNo%numTrack] = ksCurr
-                    ksBarMat[lineNo, currBarNumber] = ksCurr
-            if ksBarMat[lineNo, currBarNumber] == np.inf:
-                if currBarNumber in barsBreakPoints:
-                    ksBarMat[lineNo, currBarNumber] = 0
-                else:
-                    ksBarMat[lineNo, currBarNumber] = ksBarMat[lineNo, currBarNumber-1]
-    kk = ksBarMat.copy()
-    for idx, trShift in enumerate(TRACK_SHIFT):
-        kk[idx,:] = kk[idx,:]-trShift     
-    ksBarMatNeutral = np.zeros_like(ksBarMat) # the "standard" orchestra clef we want
-    ksBarMatNeutral[:,:] = stats.mode(kk, axis=0)[0]
-    ksBarMatNew = np.zeros_like(ksBarMat) 
-    for idx, trShift in enumerate(TRACK_SHIFT):
-        ksBarMatNew[idx,:] = ksBarMatNeutral[idx,:]+trShift 
+    ksListAllTrackNoInf = ksListAllTrack.copy()
+    for i in range(1, numBars):
+        if np.isinf(ksListAllTrackNoInf[i]):
+            ksListAllTrackNoInf[i] = ksListAllTrackNoInf[i - 1]
+    ksBarMatNeutral = np.tile(ksListAllTrackNoInf, (numTrack,1))   
     ksBarMatNeutral = ksBarMatNeutral.astype(int)    
-    ksBarMatNew = ksBarMatNew.astype(int)
+    ksBarMatNew = ksBarMatNeutral + np.tile(np.array(TRACK_SHIFT),(numBars,1)).T
     clefMat = clefMat.astype(int)
     tssList = [b.ts for b in barList[0]]
     for currBarNumber in range(numBars):
@@ -823,7 +870,6 @@ def exportXML(barList:List[List[Bar]], numTrack:int,
             flatList = set() #put here because reset in measures
             sharpList = set()
             naturalList = set()
-            accumAcc = [] # will have the list of accidentals to process
             clefType = clefMat[lineNo, currBarNumber]
             ks = ksBarMatNew[lineNo, currBarNumber]
             if currBarNumber == 0:
@@ -874,7 +920,6 @@ def exportXML(barList:List[List[Bar]], numTrack:int,
             flatList = set() #put here because reset in measures
             sharpList = set()
             naturalList = set()
-            accumAcc = [] # will have the list of accidentals to process
             clefType = clefMat[lineNo, currBarNumber]
             ks = ksBarMatNeutral[lineNo, currBarNumber]
             if currBarNumber == 0:
@@ -910,7 +955,10 @@ def exportXML(barList:List[List[Bar]], numTrack:int,
     for p in part2:
         score2.append(p)
     return score, score2, {'ksAssigned':debugXMLImg}
-
+def numberToString(num: int, strLen: int = 3):
+    stringNum = str(num)
+    strAppend = strLen-len(stringNum)
+    return '0'*strAppend + stringNum
 if __name__ == '__main__':
     noteGroupMap: np.ndarray
     stemIdxMap: np.ndarray
@@ -921,81 +969,125 @@ if __name__ == '__main__':
     sfnClefList: List[Union[Accidentals, Clef, None]]
     beamMapImg: np.ndarray
     staffList: List[Staff]
-    number = '020'
+    sheetName = 'Bee_1_challenge10page'
+    lenString = 3
+    for number in range(1,11):
+        csvPath = rf"orch_dataset\{sheetName}\csv\{sheetName}_{numberToString(number,lenString)}.csv"
+        jsonPath = rf"orch_dataset\{sheetName}\csv\{sheetName}.json"
+        df = pd.read_csv(csvPath)
+        pageMetadata = ScoreMetaData(df, jsonPath, number == 1)
+        instrumentList = ScoreMetaData.get_instruments()
+        imgName = rf"{sheetName}_{number}"
+        imgPath = rf"orch_dataset\{sheetName}\imgs\{sheetName}_{number}\{sheetName}_{number}.png"
+        pklPath = rf"orch_dataset\{sheetName}\imgs\{sheetName}_{number}\{sheetName}_{number}.pkl"
+        scorePath = rf"orch_dataset\{sheetName}\xmls\{sheetName}_{number}.musicxml"
+        scoreShiftedPath = rf"orch_dataset\{sheetName}\xmls\{sheetName}_{number}_shifted.musicxml"
+        if not os.path.isdir(rf"orch_dataset\{sheetName}\xmls"):
+            os.mkdir(rf"orch_dataset\{sheetName}\xmls")
+        
+        if not os.path.exists(pklPath):
+            (
+                noteGroupMap,
+                stemIdxMap,
+                noteGroupVerticallyMerged,
+                restMap,
+                restList,
+                sfnClefMap,
+                sfnClefList,
+                beamMapImg,
+                staffList,
+                dataDict
+            ) = png2decode(imgName, imgPath)
+            with open(pklPath, "wb") as f:
+                pickle.dump(
+                    (
+                        noteGroupMap,
+                        stemIdxMap,
+                        noteGroupVerticallyMerged,
+                        restMap,
+                        restList,
+                        sfnClefMap,
+                        sfnClefList,
+                        beamMapImg,
+                        staffList,
+                        dataDict
+                    ),
+                    f
+                )
+            print(f"finishing processing sheet {sheetName}_{number}")
+        # to save time running previous step (Debug only)
+        with open(pklPath, "rb") as f:
+            (
+                noteGroupMap,
+                stemIdxMap,
+                noteGroupVerticallyMerged,
+                restMap,
+                restList,
+                sfnClefMap,
+                sfnClefList,
+                beamMapImg,
+                staffList,
+                dataDict
+            ) = pickle.load(f)
 
-    csvPath = rf"orch_dataset\tchai_4\csv\tchai_4_{number}.csv"
-    jsonPath = csvPath.replace('.csv','.json')
-    imgPath = rf"orch_dataset\tchai_4\images\{number}\tchai_4_{number}.png"
-    df = pd.read_csv(csvPath)
-    pageMetadata = ScoreMetaData(df, jsonPath, True)
-    instrumentList = ScoreMetaData.get_instruments()
-
-    # # actual use
-    # (
-    #     noteGroupMap,
-    #     stemIdxMap,
-    #     noteGroupVerticallyMerged,
-    #     restMap,
-    #     restList,
-    #     sfnClefMap,
-    #     sfnClefList,
-    #     beamMapImg,
-    #     staffList,
-    #     dataDict
-    # ) = png2decode(f"tchai_4_{number}", rf"orch_dataset\tchai_4\images\{number}\tchai_4_{number}.png")
-    
-    # to save time running previous step (Debug only)
-    with open("processedData.pkl", "rb") as f:
-        (
-            noteGroupMap,
-            stemIdxMap,
-            noteGroupVerticallyMerged,
-            restMap,
-            restList,
-            sfnClefMap,
-            sfnClefList,
-            beamMapImg,
-            staffList,
-            dataDict
-        ) = pickle.load(f)
-
-    # !!! decoded stuff from score (by bar)
-    # !!! note object by staff line (object not just decoded)
-    allItemInScore = getAllObjectInEachLine(noteGroupMap, noteGroupVerticallyMerged, restMap, restList, sfnClefMap, sfnClefList, beamMapImg, staffList)
+        # !!! decoded stuff from score (by bar)
+        # !!! note object by staff line (object not just decoded)
+        allItemInScore = getAllObjectInEachLine(noteGroupMap, noteGroupVerticallyMerged, restMap, restList, sfnClefMap, sfnClefList, beamMapImg, staffList)
+        
+            
+        image = dataDict['image']
+        # get Barline locations -> bar center for each track: List[List[int]]
+        barEachTrack = getBarsEachTrack(image, beamMapImg, staffList)
 
         
-    image = dataDict['image']
-    # get Barline locations -> bar center for each track: List[List[int]]
-    barEachTrack = getBarsEachTrack(image, beamMapImg, staffList)
-    # TODO: add in the bar time signature, [[(9.8),(9,8)...], [(9.8),(9,8),(4,4)...]] etc.
-    barChangeList = dict()
-    barChangeList['0,0'] = [9,8] # (track, num),(TStop, TSbottom)
-    # get the list of barList (untuned)
-    barList,allRanges, numBarsEachLine = constructBar(noteGroupMap, noteGroupVerticallyMerged, restMap ,restList, sfnClefMap, sfnClefList, beamMapImg, staffList, pageMetadata, barEachTrack, barChangeList)
+        # TODO: add in the bar time signature, [[(9.8),(9,8)...], [(9.8),(9,8),(4,4)...]] etc.
+        barChangeList = dict()
+        barChangeList['0,0'] = [4,4] # (track, num),(TStop, TSbottom)
+        # get the list of barList (untuned)
+        barList,allRanges, numBarsEachLine = constructBar(noteGroupMap, noteGroupVerticallyMerged, restMap ,restList, sfnClefMap, sfnClefList, beamMapImg, staffList, pageMetadata, barEachTrack, barChangeList)
 
-    numBarsEachTrack = [numBarsEachLine[p[0]] for p in pageMetadata.getTrackRange()]
+        numBarsEachTrack = [numBarsEachLine[p[0]] for p in pageMetadata.getTrackRange()]
 
-    # tune bar list based on timeSignature
-    barBreakPoints = tuneBarList(barList, numBarsEachTrack)
+        # tune bar list based on timeSignature
+        barBreakPoints = tuneBarList(barList, numBarsEachTrack)
+        # modifies barList in place!
+        ksMatEachTrackSameAsVisual, ksEachTrack, barList = getKSMatAndKSList(pageMetadata, barList)
+        
+        # add instruments tracks for those not appearing
+        barDictPerInstrument = assignBarlistInstrument(barList, pageMetadata)
+        barListPerInstrument = [barDictPerInstrument[k] for k in list(barDictPerInstrument.keys())]
+        INSTRUMENT_TRK = list(barDictPerInstrument.keys())
+        # TODO: enter clef options for each instrument (ex: flute - 1(treble), viola - 0(alto), cello-[1,-1,-2](treble, bass, tenor))
+        def constructInstrumentMappingDict(json_file):
+            clef_map = {"treble": 1, "alto": 0, "bass": -1, "tenor": -2}
+            with open(json_file, "r") as f:
+                data = json.load(f)
+            mapped = {}
+            for instrument, clefs in data.items():
+                mapped[instrument] = sorted([clef_map[c] for c in clefs], reverse=True)
+            return mapped
 
-    # add instruments tracks for those not appearing
-    barDictPerInstrument = assignBarlistInstrument(barList, pageMetadata)
-    barListPerInstrument = [barDictPerInstrument[k] for k in list(barDictPerInstrument.keys())]
-    INSTRUMENT_TRK = list(barDictPerInstrument.keys())
-    # TODO: enter clef options for each instrument (ex: flute - 1(treble), viola - 0(alto), cello-[1,-1,-2](treble, bass, tenor))
-    CLEF_OPTIONS = [[1,0,-1,-2] for _ in barListPerInstrument]
-    tone = [ins.split(':')[1] if len(ins.split(':')) > 1 else '' for ins in INSTRUMENT_TRK]
-    TRACK_SHIFT = []
-    for tn in tone:
-        if 'B flat' in tn:
-            TRACK_SHIFT.append(2)
-        elif 'F' in tn:
-            TRACK_SHIFT.append(4)
-        else:
-            TRACK_SHIFT.append(0)
-    score, scoreShifted, debugImages = exportXML(barListPerInstrument, len(INSTRUMENT_TRK), TRACK_SHIFT, CLEF_OPTIONS, image, beamMapImg=beamMapImg, barsBreakPoints = barBreakPoints)
-
-    print()
+        instrument_dict = constructInstrumentMappingDict("instrumentMapping.json")
+        cleanedInstrumentList = [s.split('__')[0].split(':')[0] for s in INSTRUMENT_TRK]
+        DEFAULT_CLEFS = [1,0,-1,-2]
+        CLEF_OPTIONS = [instrument_dict.get(instr, DEFAULT_CLEFS) for instr in cleanedInstrumentList]
+        tone = [ins.split(':')[1] if len(ins.split(':')) > 1 else '' for ins in INSTRUMENT_TRK]
+        TRACK_SHIFT = []
+        for tn in tone:
+            if 'B flat' in tn:
+                TRACK_SHIFT.append(2)
+            elif 'F' in tn:
+                TRACK_SHIFT.append(4)
+            else:
+                TRACK_SHIFT.append(0)
+        ksListAllTrack = np.concatenate(ksEachTrack)
+        assert len(ksListAllTrack) == len(barListPerInstrument[0])
+        score, scoreShifted, debugImages = exportXML(barListPerInstrument, len(INSTRUMENT_TRK), TRACK_SHIFT, CLEF_OPTIONS, ksListAllTrack, image=image, beamMapImg=beamMapImg, barsBreakPoints = barBreakPoints)
+        score.write('musicxml', scorePath)
+        print(f"score write to {scorePath}")
+        scoreShifted.write('musicxml',scoreShiftedPath)
+        print(f"shifted score write to {scoreShiftedPath}")
+        print()
 
 
             

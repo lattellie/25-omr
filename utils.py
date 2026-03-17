@@ -286,6 +286,7 @@ class sfnClefInterface(ABC):
     def getType(self) -> int:
         # 0 is accidental, 1 is clef
         pass
+
 class Accidentals(sfnClefInterface):
     def __init__(self, bbox:Tuple[int,int,int,int], shift: int):
         self.boundingBox:Tuple[int,int,int,int] = bbox
@@ -324,6 +325,18 @@ class Accidentals(sfnClefInterface):
             return 'b'
         else:
             return 'invalid accidentals'
+class KeySignature():
+    def __init__(self, accs: List[Accidentals]):
+        self.accs = accs
+    def getSharpFlat(self)->float:
+        return sum([acc.shift for acc in self.accs])/len(self.accs)
+    # supposingly if there's 4 flats will be -4, 4 sharp will be +4
+    def getSharpFlatInt(self) -> int:
+        if sum([acc.shift for acc in self.accs]) > 0:
+            return len(self.accs)
+        else:
+            return -len(self.accs)
+    
 class Clef(sfnClefInterface):
     def __init__(self, bbox:Tuple[int,int,int,int], type: int):
         self.boundingBox:Tuple[int,int,int,int] = bbox
