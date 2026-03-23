@@ -2,17 +2,19 @@ from abc import ABC, abstractmethod
 from fractions import Fraction
 import os
 from typing import List,Tuple, Union, Set
+from music21 import instrument
 import math
 
 import cv2
 import numpy as np
+import json
 
 from dd_classes import RestNg
 
 # --------------------------------------------------------------------------------------------------
 # Setting for debug helper functions
 # --------------------------------------------------------------------------------------------------
-DEBUG_IMAGE = True
+DEBUG_IMAGE = False
 LOG_MESSAGE = True
 
 # --------------------------------------------------------------------------------------------------
@@ -43,6 +45,101 @@ def writeDebugImagesFromDict(debugImages, writeToOutput = False, img_name = ''):
             outputImWrite(f'{img_name}_{si}.jpg', debugImages[si])
         imwrite(f'{si}.jpg', debugImages[si])
 
+# --------------------------------------------------------------------------------------------------
+# helper function for Key Signatures
+# --------------------------------------------------------------------------------------------------
+class ToneHelper:
+    def __init__(self, toneMapPath: str):
+        with open(toneMapPath, 'r') as f:
+            self.toneMap = json.load(f)
+    # get the actual key signature based on what signature it looks like
+    # for instance, in B flat clarinet, if it looks like 1 flat it's actually 3 flat, so -2
+    def getKsShift(self, toneName: str, includeForKs = True) -> int:
+        if toneName == "":
+            return 0
+        toneData = self.toneMap.get(toneName)
+        if not includeForKs:
+            return np.inf
+        if toneData is None:
+            print(f"can't find tone for {toneName}, set ksShift to 0")
+            return 0
+        else:
+            return int(toneData[0])
+    def getNoteShift(self, toneName: str) -> int:
+        if toneName == "":
+            return 0
+        toneData = self.toneMap.get(toneName)
+        if toneData is None:
+            print(f"can't find tone for {toneName}, set noteShift to 0")
+            return 0
+        else:
+            return int(toneData[1])
+    def getKsAndNoteShift(self, toneName: str, includeForKs = True) -> Tuple[int, int]:
+        if toneName == "":
+            return (0,0)
+        toneData = self.toneMap.get(toneName)
+        noteShift = 0
+        ksShift = np.inf
+        if toneData is None:
+            print(f"can't find tone for {toneName}, set all shifts to 0")
+        else:
+            noteShift = toneData[1]
+            if includeForKs:
+                ksShift = toneData[0]
+        return ksShift, noteShift
+
+# --------------------------------------------------------------------------------------------------
+# Helper function for instrument
+# --------------------------------------------------------------------------------------------------
+
+def constructInstrumentMappingDict(json_file) -> dict:
+    clef_map = {"treble": 1, "alto": 0, "bass": -1, "tenor": -2}
+    with open(json_file, "r") as f:
+        data = json.load(f)
+    mapped = {}
+    for instrument, clefs in data.items():
+        mapped[instrument] = [clef_map[c] for c in clefs]
+    return mapped
+
+def isInstrumentIncluded(currIns: str):
+    notIncluded = ["trumpet", "horn", "timpani"] # instruments that is noted in its own way
+    return all(word not in currIns.lower() for word in notIncluded)
+
+instrument_classes = {
+    "violin": instrument.Violin,
+    "viola": instrument.Viola,
+    "cello": instrument.Violoncello,
+    "double_bass": instrument.Contrabass,
+    "bass": instrument.Contrabass,
+    "piccolo": instrument.Piccolo,
+    "flute": instrument.Flute,
+    "oboe": instrument.Oboe,
+    "english_horn": instrument.EnglishHorn,
+    "clarinet": instrument.Clarinet,
+    "bass_clarinet": instrument.BassClarinet,
+    "bassoon": instrument.Bassoon,
+    "contrabassoon": instrument.Contrabassoon,
+    "french_horn": instrument.Horn,
+    "trumpet": instrument.Trumpet,
+    "trombone": instrument.Trombone,
+    "bass_trombone": instrument.BassTrombone,
+    "tuba": instrument.Tuba,
+    "harp": instrument.Harp,
+    "piano": instrument.Piano,
+    "celesta": instrument.Celesta,
+    "timpani": instrument.Timpani,
+    "xylophone": instrument.Xylophone,
+    "marimba": instrument.Marimba,
+    "glockenspiel": instrument.Glockenspiel,
+    "vibraphone": instrument.Vibraphone,
+    "horn": instrument.Horn
+}
+def get_instrument_from_string(name: str):
+    name_lower = name.lower()
+    for key, instr_class in instrument_classes.items():
+        if key in name_lower:
+            return instr_class()
+    return instrument.Piano()
 # --------------------------------------------------------------------------------------------------
 # Class definitions
 # --------------------------------------------------------------------------------------------------

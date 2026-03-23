@@ -1934,6 +1934,7 @@ def png2decode(img_name: str, img_path: str):
     imwrite(f'knn_beamImg.jpg', beam_img2)
     
     noteGroupList,  beamMapImg, noteGroupStemMap, noteGroupMap, debugImages = knnRhythmAndDraw(stem_list_assigned, beam_heights, image, bar_height, beamMapImg, stemUpClassifier=STEM_UP_MODEL, stemDownClassifier=STEM_DOWN_MODEL,img_name=img_name)
+    outputImWrite(f"{img_name}_knnbeams2.jpg", debugImages['knnbeams2'])
     writeDebugImagesFromDict(debugImages)
     outputNotegroupStemMapImg(noteGroupStemMap, image)
     outputNoteGroupMapImg(noteGroupMap, image)
