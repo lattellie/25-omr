@@ -14,7 +14,7 @@ from dd_classes import RestNg
 # --------------------------------------------------------------------------------------------------
 # Setting for debug helper functions
 # --------------------------------------------------------------------------------------------------
-DEBUG_IMAGE = False
+DEBUG_IMAGE = True
 LOG_MESSAGE = True
 
 # --------------------------------------------------------------------------------------------------
@@ -264,6 +264,9 @@ class Rest:
         self.hasdot: bool = False
         self.noteGroupId: int|None = None
         self.tunedLength: Fraction|None = None
+        self.indexNumber: int|None = None
+    def setIndexNumber(self, index:int):
+        self.indexNumber = index
     def setNgId(self, ngId:int):
         self.noteGroupId = ngId
     def getLengthFraction(self):
@@ -291,6 +294,9 @@ class NoteGroup:
         # self.noteLineMiddle: List[bool] = []
         self.restList:List[Rest] = []
         self.tunedLength: Fraction|None = None
+        self.indexNumber: int|None = None
+    def setIndexNumber(self, index:int):
+        self.indexNumber = index
     def addRest(self, rest:Rest):
         self.restList.append(rest)
         self.updateBoxRest(rest.boundingBox)
@@ -328,6 +334,11 @@ class NoteGroup:
         return f"Note_{stemStrings}{self.tunedLength}"
 
 def mergeNoteGroup(ng1:NoteGroup, ng2: NoteGroup, beamMapImg: np.ndarray):
+    if not ng1:
+        return ng2
+    if not ng2:
+        return ng1
+
     thres = 0.3
     nsl1:List[Stem] = ng1.noteStemList
     nslSum1 = [(np.sum(beamMapImg[sm.noteBox[1]:sm.noteBox[3],sm.noteBox[0]:sm.noteBox[2],0]==255))/((sm.noteBox[2]-sm.noteBox[0])*(sm.noteBox[3]-sm.noteBox[1]))for sm in nsl1]    
@@ -394,6 +405,8 @@ class Accidentals(sfnClefInterface):
         self.ksKeySop: float|None = None
         self.shrinkYs: Tuple[int,int]|None = None
         self.ngIndex: int|None = None
+    def setIndexNumber(self, index:int):
+        return
     def getString(self):
         if self.shift == 0:
             return 'natural'
@@ -433,6 +446,9 @@ class KeySignature():
             return len(self.accs)
         else:
             return -len(self.accs)
+    def setIndexNumber(self, index:int):
+        return
+
     
 class Clef(sfnClefInterface):
     def __init__(self, bbox:Tuple[int,int,int,int], type: int):

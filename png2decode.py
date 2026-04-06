@@ -948,6 +948,9 @@ def findRests(dataDict:dict,
         imgrgb = cv2.putText(imgrgb,restClassNames[j], (30, 30+j*30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, class_colors[j], 2, cv2.LINE_AA)
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
+        # filter out too big of boxed (likely some error)
+        if (w>barheight*2 and h>barheight):
+            continue
         if (w>barheight*0.6 and h>barheight):
             box = (max(x-barheight//2, 0), max(y-barheight*2, 0), min(x+w+barheight//2, symbol.shape[1]-1), min(y+h+barheight*2, symbol.shape[0]-1))
             # shrink the box so it centers around the rest
@@ -1201,6 +1204,8 @@ def symbol_classification(dataDict: dict, model:Sfn_Clef_classifier, bar_height:
 
             if h>sfn_median_height*2:
                 b = [0,0,0,0]
+                if np.max(seg_img_to_delete) == 0: # if there's some issue with the bounding box basically
+                    break
                 # middle_del = seg_img_to_delete[sfn_median_height//2:h-sfn_median_height//2,:]
                 ver_avg_mid = np.mean(seg_img_to_delete,1)
                 b[1],b[3] = getBestRange(ver_avg_mid, sfn_median_height)
@@ -1664,8 +1669,9 @@ def assignSfnToNote(image:np.ndarray, noteGroupMap:np.ndarray, noteGroupVertical
             ngx0, _, ngx1, _ = noteGroupVerticallyMerged[ngIdx].boundingBox
             cntLst = [np.sum(np.sum(stemIdxMap[y0:y1,ngx0:ngx1]==i,0)>0) for i in stemIdxLst]
             stemIdx = stemIdxLst[cntLst.index(max(cntLst))]
-        noteGroupVerticallyMerged[ngIdx].noteStemList[stemIdx].accidentals = sfnc.getValue()
-        sfnc.ngIndex = ngIdx
+        if stemIdx < len(noteGroupVerticallyMerged[ngIdx].noteStemList):
+            noteGroupVerticallyMerged[ngIdx].noteStemList[stemIdx].accidentals = sfnc.getValue()
+            sfnc.ngIndex = ngIdx
     for grps in sfnGroupList:
         currNgIdx = sfnClefList[grps[-1]].ngIndex
         if currNgIdx is None:
@@ -1690,7 +1696,7 @@ def assignSfnToNote(image:np.ndarray, noteGroupMap:np.ndarray, noteGroupVertical
                     noteGroupVerticallyMerged[currNgIdx].noteStemList[stemIdx].accidentals = currSfn.getValue()
                     noteGroupVerticallyMerged[currNgIdx].noteStemList[stemIdx].accidentalBox = currSfn.boundingBox
                 else:
-                    print('Error')
+                    print('Error assigning sfn to notes')
 
 
     accidentalsColors = [(255,255,0),(255,0,125),(255,0,255)] # flat, natural, sharp

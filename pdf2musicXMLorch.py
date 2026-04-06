@@ -63,6 +63,15 @@ class ScoreMetaData:
         )
         self.trackRange = ranges
         return ranges
+    
+    def getTrackXYRange(self, staffList:List[Staff]):
+        ranges = self.getTrackRange()
+        retRangeList = []
+        for r in ranges:
+            start = r[0]
+            end = r[1] # included
+            retRangeList.append((staffList[start].left, staffList[start].right, staffList[start].ys[0], staffList[end].ys[-1]))
+        return retRangeList
 
     def getGroupingRange(self)->List[List[Tuple[int,int]]]:
         if len(self.groupingRange)!= 0:
@@ -134,7 +143,15 @@ def parseCsvData(csv_path: str):
         csvData = list(csv.reader(f))
     return csvData
 
-def getBarsEachTrack(image:np.ndarray, beamMapImg:np.ndarray, staffList:List[Staff]):
+def findBarPosition(staffImgBinary: np.ndarray, tolerance, row_ratio:float = 0.7):
+    kernel = np.ones((1, 2*tolerance+1), dtype=np.uint8)
+    expanded = cv2.dilate(staffImgBinary.astype(np.uint8), kernel)
+    acc = np.sum(expanded, axis=0)
+    threshold = staffImgBinary.shape[0] * row_ratio
+    barPos = np.where(acc > threshold)[0]
+    return barPos
+
+def getBarsEachTrack(image:np.ndarray, beamMapImg:np.ndarray, staffList:List[Staff], tolerance:int = 20):
     img = image.copy()
     staffCenters = [sf.ys[2] for sf in staffList]
     _,itemMap,_ = cv2.split(beamMapImg)
@@ -143,11 +160,10 @@ def getBarsEachTrack(image:np.ndarray, beamMapImg:np.ndarray, staffList:List[Sta
     for trkRange in pageMetadata.getTrackRange():
         staffStart = staffList[trkRange[0]].ys[0]
         staffEnd = staffList[trkRange[1]].ys[-1]
-        barSum = np.sum(staffImgBinary[trkRange[0]:trkRange[1],:],axis=0)
-        barPos = np.where(barSum>(trkRange[1]-trkRange[0])*0.7)
+        barPos = findBarPosition(staffImgBinary[trkRange[0]:trkRange[1],:], tolerance)
         img[staffStart:staffEnd, barPos] = (0,0,255)
-        barEachTrack += barPos
-    imwrite("barForTracks.jpg", img)
+        barEachTrack += [barPos.tolist()]
+    imwrite(f"barForTracks{tolerance}.jpg", img)
     return barEachTrack
 
 
@@ -187,8 +203,9 @@ def getAllObjectInEachLine(
                 if 0 in inMapId:
                     inMapId.remove(0)
                 if (len(inMapId) == 1):
-                    allItemInLine.append(currLst[inMapId[0]])
-                    currX = currLst[inMapId[0]].boundingBox[2]+1
+                    currentElementId = inMapId[0]
+                    allItemInLine.append(currLst[currentElementId])
+                    currX = currLst[currentElementId].boundingBox[2]+1
                 else:
                     currX += 1
         allItems.append(allItemInLine)
@@ -226,7 +243,7 @@ def constructBar(noteGroupMap:np.ndarray,
 
     currTS = barChangeList.get('0,0')
     for t in range(numLines): # trackNo
-        printedLineNo = t # the 
+        printedLineNo = t # the current line number
         currBarList:List[Bar] = []
         sf0 = staffList[printedLineNo]
         trackForThatLine = pageMetadata.getTrackForLineIdx(t)
@@ -237,7 +254,7 @@ def constructBar(noteGroupMap:np.ndarray,
             if barChangeList.get(f'{trackForThatLine},{ridx}'):
                 currTS = barChangeList.get(f'{trackForThatLine},{ridx}')
                 if currTS != [9,8]:
-                    print(f'ridx: ${ridx}, rng: ${rng}')
+                    print(f'ridx: {ridx}, rng: {rng}')
             if notFinishedBar is not None:
                 bar = notFinishedBar
                 notFinishedBar = None
@@ -249,7 +266,7 @@ def constructBar(noteGroupMap:np.ndarray,
                 if 0 in lineLst:
                     lineLst.remove(0)
                 if len(lineLst)>1:
-                    for i in [1,5,3,2]:
+                    for i in [1,5,3,2]: # noteGroup(1), rest(5), clef(3), accidentals(2)
                         if i in lineLst:
                             lineLst = [i]
                             break
@@ -262,6 +279,17 @@ def constructBar(noteGroupMap:np.ndarray,
                     inMapId = np.unique(currMap[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), currX]).tolist()
                     if 0 in inMapId:
                         inMapId.remove(0)
+                    if len(inMapId) > 1 and typeId == 1: # if it's multiple notegroups in that line
+                        # get the noteGroup that's closer to the center of the staff
+                        yCenter = sf0.ys[2]
+                        newInMapIdIdx = -1
+                        currSmallestDist = np.inf
+                        for idid in range(0,len(inMapId)):
+                            x0,y0,x1,y1 = currLst[inMapId[idid]].boundingBox
+                            if abs((y1+y0)/2-yCenter) < currSmallestDist:
+                                currSmallestDist = abs((y1+y0)/2-yCenter)
+                                newInMapIdIdx = idid
+                        inMapId = [inMapId[newInMapIdIdx]]
                     if len(inMapId)==1: 
                         sanityCheck = True
                         if typeId == 3: # clef
@@ -274,8 +302,8 @@ def constructBar(noteGroupMap:np.ndarray,
                                     currClef.type = -2
                         if not sanityCheck:
                             # don't add the element if it's suspicious
-                            currX = currLst[inMapId[0]].boundingBox[2]+1
-                        elif typeId == 1:
+                            currX += 1
+                        elif typeId == 1: # notegroup
                             x0,y0,x1,y1 = currLst[inMapId[0]].boundingBox
                             uniq = np.unique(rr[y0:y1, x0:x1]).tolist()
                             if 0 in uniq:
@@ -285,54 +313,123 @@ def constructBar(noteGroupMap:np.ndarray,
                             elif uniq[0] != printedLineNo+1:
                                 currX = currLst[inMapId[0]].boundingBox[2]+1
                             else:
+                                currLst[inMapId[0]].setIndexNumber(inMapId[0])
                                 bar.addElement(currLst[inMapId[0]])
                                 if (currX == currLst[inMapId[0]].boundingBox[2]+1):
-                                    print()
+                                    print("item width = 1")
                                 currX = currLst[inMapId[0]].boundingBox[2]+1
                         else:
-                            bar.addElement(currLst[inMapId[0]])
-                            currX = currLst[inMapId[0]].boundingBox[2]+1
+                            cx0, cy0, cx1, cy1 = currLst[inMapId[0]].boundingBox
+                            allItemInHere = np.unique(gg[cy0:cy1, cx0:cx1]).tolist()
+                            if 1 in allItemInHere:
+                                currX += min(np.where(gg[cy0:cy1, cx0:cx1]==1)[1])+1
+                            else:
+                                bar.addElement(currLst[inMapId[0]])
+                                currX = currLst[inMapId[0]].boundingBox[2]+1
+                                if typeId == 5:
+                                    currLst[inMapId[0]].setIndexNumber(inMapId[0])
                     else:
                         currX+=1
                         print("has more than 1 id")
             currBarList.append(bar)
-        notfinishedBarStuff = np.where(gg[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), rng[1]:]>0)[1]
-        nextIdx = 0
-        if len(notfinishedBarStuff) > 0:
-            nextIdx = np.max(np.unique(np.where(gg[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), rng[1]:]>0)[1]))
-        if nextIdx>5:
-            rng = (isBar[-1]+sf0.left+1, rng[1]+nextIdx)
-            bar = Bar(currTS)
-            currX = rng[0]
-            while currX<rng[1]:
-                lineLst = np.unique(gg[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), currX]).tolist()
-                if 0 in lineLst:
-                    lineLst.remove(0)
-                if len(lineLst)>1:
-                    for i in [1,5,3,2]:
-                        if i in lineLst:
-                            lineLst = [i]
-                            break
-                if len(lineLst)==0 or 4 in lineLst:
-                    currX+=1
-                else:
-                    typeId = lineLst[0]
-                    currMap = mapForMatching[typeId]
-                    currLst = listForMatching[typeId]
-                    inMapId = np.unique(currMap[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), currX]).tolist()
-                    if 0 in inMapId:
-                        inMapId.remove(0)
-                    if len(inMapId)==1:
-                        bar.addElement(currLst[inMapId[0]])
-                        currX = currLst[inMapId[0]].boundingBox[2]+1
-                    else:
-                        currX+=1
-                        print("has more than 1 id")
-            notFinishedBar = bar
+        # notfinishedBarStuff = np.where(gg[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), rng[1]:]>0)[1]
+        # nextIdx = 0
+        # if len(notfinishedBarStuff) > 0:
+        #     nextIdx = np.max(np.unique(np.where(gg[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), rng[1]:]>0)[1]))
+        # if nextIdx>5:
+        #     rng = (isBar[-1]+sf0.left+1, rng[1]+nextIdx)
+        #     bar = Bar(currTS)
+        #     currX = rng[0]
+        #     while currX<rng[1]:
+        #         lineLst = np.unique(gg[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), currX]).tolist()
+        #         if 0 in lineLst:
+        #             lineLst.remove(0)
+        #         if len(lineLst)>1:
+        #             for i in [1,5,3,2]:
+        #                 if i in lineLst:
+        #                     lineLst = [i]
+        #                     break
+        #         if len(lineLst)==0 or 4 in lineLst:
+        #             currX+=1
+        #         else:
+        #             typeId = lineLst[0]
+        #             currMap = mapForMatching[typeId]
+        #             currLst = listForMatching[typeId]
+        #             inMapId = np.unique(currMap[sf0.ys[0]-sf0.get_yOne():sf0.ys[-1]+sf0.get_yOne(), currX]).tolist()
+        #             if 0 in inMapId:
+        #                 inMapId.remove(0)
+        #             if len(inMapId)==1:
+        #                 bar.addElement(currLst[inMapId[0]])
+        #                 currX = currLst[inMapId[0]].boundingBox[2]+1
+        #             else:
+        #                 currX+=1
+        #                 print("has more than 1 id")
+        #     notFinishedBar = bar
         barList[t] = currBarList
         numBarsEachLine[t] = len(currBarList)
         # in order of vln1's 1st line, 2nd line ... | vln2's 1st line, 2nd line ...
     return barList,allRanges, numBarsEachLine
+
+# TODO: rotate the image at here? as long as all maps are rotated it should be fine
+def stackItemVertically(image:np.ndarray, 
+                        barList: List[List[Bar]], 
+                        pageMetadata: ScoreMetaData,
+                        staffList:List[Staff],
+                        noteGroupVerticallyMerged: List[NoteGroup],
+                        restList: List[Rest]):
+    noteRestMap =  np.zeros((image.shape[0], image.shape[1]), dtype=np.int16)
+    for oneLine in barList:
+        for oneBar in oneLine:
+            for elem in oneBar.elementList:
+                if type(elem) == NoteGroup:
+                    x0,y0,x1,y1 = elem.boundingBox
+                    noteRestMap = cv2.rectangle(noteRestMap, (x0,y0),(x1,y1),elem.indexNumber, -1)
+                elif type(elem) == Rest:
+                    x0,y0,x1,y1 = elem.boundingBox
+                    if elem.rhythm != -1:
+                        noteRestMap = cv2.rectangle(noteRestMap, (x0,y0),(x1,y1),-elem.indexNumber, -1)
+    img2 = image.copy()
+    img2[noteRestMap>0] = (0,0,255)
+    img2[noteRestMap<0] = (255,255,0)
+    imwrite("finalNoteRest.jpg", img2)
+    retImg = image.copy()
+    for (xStart, xEnd, yStart, yEnd) in pageMetadata.getTrackXYRange(staffList):
+        currX = xStart
+        while currX < xEnd:
+            if currX > 1800:
+                a = 1
+            inLineIds = np.unique(noteRestMap[yStart:yEnd, currX]).tolist()
+            if inLineIds == [0]:
+                currX += 1
+                continue
+            allElementLists = []
+            allXCenters = []
+            allXEnds = []
+            for inLineId in inLineIds:
+                if inLineId == 0:
+                    continue
+                if inLineId > 0: # note
+                    currElem = noteGroupVerticallyMerged[inLineId]
+                elif inLineId < 0: # rest
+                    currElem = restList[-inLineId]
+                allElementLists.append(currElem)
+                allXCenters.append((currElem.boundingBox[0]+currElem.boundingBox[2])//2)
+                allXEnds.append(currElem.boundingBox[2])
+            xCenterAvg = sum(allXCenters)//len(allXCenters)
+            newInLineIdx = np.unique(noteRestMap[yStart:yEnd, xCenterAvg]).tolist()
+            if set(inLineIds) == set(newInLineIdx):
+                # current Center is the center of this whole noteGroup thingy
+                # !!! I'm gonna draw on the image for now but other things have to be done here
+                # cv2.rectangle(sfnClefImg, (x0,y0),(x1,y1), class_colors2[predict_idx],2,cv2.LINE_AA)
+                retImg = cv2.rectangle(retImg, (xCenterAvg, yStart), (xCenterAvg, yEnd), (255,100,0), 3, cv2.LINE_AA)
+                for elem in allElementLists:
+                    x0,y0,x1,y1 = elem.boundingBox
+                    retImg = cv2.rectangle(retImg, (x0,y0), (x1,y1), (255,255,0), -1, cv2.LINE_AA)
+                currX = max(max(allXEnds), currX)+1
+            else:
+                currX = max(xCenterAvg+1, currX+1)
+    imwrite("stackingNotes.jpg", retImg)
+    return noteRestMap, retImg
 
 # originally we pass in a list of each track [vln1's bars: [bar1, bar2 ...], vln2's bars: [bar1, bar2 ...]]
 # now we have each line differently
@@ -647,10 +744,15 @@ def exportXML(barList:List[List[Bar]],
             pitchName = referenceList[pitchNo%12]
             returnList[idx] = pitchName + str(clefNum)
         return returnList
-    def parseNoteGroupShift(elem:NoteGroup, flatSet, sharpSet, naturalSet, currClef, trkShift, flatSharp, linNo):
-        # trkShift: 0 if original: -2, new: -2 (two flats), 1 if original: -2, new: -1
+    def parseNoteGroupShift(elem:NoteGroup, flatSet, sharpSet, naturalSet, currClef, flatSharp, linNo, noteValShift):
+        # trkShift: 
+            # 0 if original: -2, new: -2 (two flats), 
+            # 1 if original: -2, new: -1
         # flatSharp: how many flats/sharp, -2: two flats 
-        # flatSharp = 2, trkShift = 0: (-2), flatSharp = 2, trkShift = 1: (-1)
+            # flatSharp = 2, trkShift = 0: (-2), 
+            # flatSharp = 2, trkShift = 1: (-1)
+        # ksShift: 
+        # if original key signature is -2, ksShift is 1: -> actually it's -1 (the key signature we actually hear)
         keyLst = []
         currLength = 1
         regNoteCount = 0
@@ -702,7 +804,7 @@ def exportXML(barList:List[List[Bar]],
             return flatSet, sharpSet, None
         keyShiftedList = keyLst
         trksOriginal[linNo].append(keyLst)
-        keyShiftedList = pitchListShift(keyLst, (-trkShift*7)%12, flatSharp>0)
+        keyShiftedList = pitchListShift(keyLst, noteValShift, flatSharp>0)
         trksShifted[linNo].append(keyShiftedList)
         if len(keyShiftedList) > 1:
             return flatSet, sharpSet, chord.Chord(keyShiftedList, quarterLength = currLength*4)
@@ -806,13 +908,18 @@ def exportXML(barList:List[List[Bar]],
         if np.isinf(ksListAllTrackNoInf[i]):
             ksListAllTrackNoInf[i] = ksListAllTrackNoInf[i - 1]
     ksBarMatNeutral = np.tile(ksListAllTrackNoInf, (numTrack,1))   
-    ksBarMatNeutral = ksBarMatNeutral.astype(int)    
-    ksBarMatNew = ksBarMatNeutral + np.tile(np.array(TRACK_SHIFT),(numBars,1)).T
+    ksBarMatNeutral = ksBarMatNeutral.astype(int)
+    trackShiftInf = [t if t is not None else np.inf for t in trackKsShift]
+    ksBarMatNew = ksBarMatNeutral + np.tile(np.array(trackShiftInf),(numBars,1)).T
+    # if we want to replace it then 
+    ksBarMatNeutral[np.isinf(ksBarMatNew)] = 0
+    ksBarMatNew[np.isinf(ksBarMatNew)] = 0
+    ksBarMatNew = ksBarMatNew.astype(int)
     clefMat = clefMat.astype(int)
     tssList = [b.ts for b in barList[0]]
-    for currBarNumber in range(numBars):
+    for currBarNumber in range(numBars): # how many bars each line
         barNumber = currBarNumber+1
-        for lineNo in range(len(barList)):
+        for lineNo in range(len(barList)): # each track
             currBar = barList[lineNo][currBarNumber]
             measure = stream.Measure(number=barNumber)
             flatList = set() #put here because reset in measures
@@ -856,7 +963,9 @@ def exportXML(barList:List[List[Bar]],
             part[lineNo%numTrack].append(measure)
     for p in part:
         score.append(p)
+    '''
     # Part 2: with shift
+    ksBarMatNeutral
     ksSharp = [set() for _ in range(numTrack)]
     ksFlat = [set() for _ in range(numTrack)] 
     for currBarNumber in range(numBars): # for the new one shifted
@@ -872,12 +981,12 @@ def exportXML(barList:List[List[Bar]],
             ks = ksBarMatNeutral[lineNo, currBarNumber]
             if currBarNumber == 0:
                 measure.append(getClefFromType(clefType))
-                setKSNeutral(ks, lineNo, TRACK_SHIFT[lineNo])
+                setKSNeutral(ks, lineNo, ks)
                 measure.append(key.KeySignature(ks))
             elif clefType != clefMat[lineNo, currBarNumber-1]:
                 measure.append(getClefFromType(clefType))
             elif ks != ksBarMatNeutral[lineNo, currBarNumber-1]:
-                setKSNeutral(ks, lineNo, TRACK_SHIFT[lineNo])
+                setKSNeutral(ks, lineNo, ks)
                 measure.append(key.KeySignature(ks))
             if currBar.getTunedTotalBeat() == 0: 
                 measure.append(note.Rest(quarterLength = currBar.ts[0]/currBar.ts[1]*4))
@@ -888,9 +997,9 @@ def exportXML(barList:List[List[Bar]],
                                                                    sharpList, 
                                                                    naturalList, 
                                                                    clefMat[lineNo, currBarNumber],
-                                                                   TRACK_SHIFT[lineNo],
-                                                                   ksBarMatNeutral[0,currBarNumber],
-                                                                   lineNo)
+                                                                   ks,
+                                                                   lineNo,
+                                                                   trackNoteShift[lineNo])
                     if currNote is not None:
                         measure.append(currNote)
                     else:
@@ -902,7 +1011,8 @@ def exportXML(barList:List[List[Bar]],
             part2[lineNo%numTrack].append(measure)
     for p in part2:
         score2.append(p)
-    return score, score2, {'ksAssigned':debugXMLImg}
+    '''
+    return score, {'ksAssigned':debugXMLImg}
 
 def numberToString(num: int, strLen: int = 3):
     stringNum = str(num)
@@ -922,6 +1032,112 @@ def getTrackKsAndNoteShift(toneHelper: ToneHelper, instrumentList: List[str]) ->
         trackNoteShift.append(noteShift)
     return trackKsShift, trackNoteShift
 
+
+# def readCsvAndEditViolin(csvPath: str):
+#     df = pd.read_csv(csvPath)
+#     # Normalize empty values
+#     df['ins1'] = df['ins1'].replace(r'^\s*$', np.nan, regex=True)
+#     ins = df['ins1'].tolist()
+#     n = len(ins)
+#     new_ins = ins.copy()
+#     # --- Step 1: Fill empty rows intelligently ---
+#     for i in range(n):
+#         if pd.isna(ins[i]):
+#             prev_is_violin = (i > 0 and new_ins[i-1] == 'violin')
+#             next_is_violin = (i < n-1 and ins[i+1] == 'violin')
+#             if prev_is_violin or next_is_violin:
+#                 # Count consecutive violins if we insert here
+#                 count = 1  # this position
+#                 # look left
+#                 j = i - 1
+#                 while j >= 0 and new_ins[j] == 'violin':
+#                     count += 1
+#                     j -= 1
+#                 # look right (use original to avoid chain pollution)
+#                 j = i + 1
+#                 while j < n and ins[j] == 'violin':
+#                     count += 1
+#                     j += 1
+#                 if count <= 2:
+#                     new_ins[i] = 'violin'
+#                 else:
+#                     new_ins[i] = 'unknown'
+
+#     df['ins1'] = new_ins
+#     # --- Step 2: Assign violin 1 / 2 ONLY (never 3) ---
+#     is_violin = df['ins1'] == 'violin' # Create groups that reset whenever the instrument changes 
+#     group_id = (is_violin != is_violin.shift()).cumsum() # Assign numbers only to violin rows 
+#     df.loc[is_violin, 'part1'] = ( 
+#         df[is_violin] 
+#         .groupby(group_id[is_violin]) 
+#         .cumcount() + 1 
+#         ) # Optional: convert to int (instead of float NaN) 
+#     for i in range(n):
+#         if df.at[i, 'ins1'] == 'viola':
+#             if i - 2 >= 0:
+#                 df.at[i-2, 'ins1'] = 'violin'
+#                 df.at[i-1, 'ins1'] = 'violin'
+#                 part[i-2] = 1
+#                 part[i-1] = 2
+#     df['part1'] = pd.Series(part, dtype="Int64")
+#     df['part1'] = df['part1'].astype('Int64') 
+#     return df
+
+# force two linew above viola to be violin
+def readCsvAndEditViolin(csvPath: str):
+    df = pd.read_csv(csvPath)
+    # Ensure part1 is nullable int
+    if 'part1' in df.columns:
+        df['part1'] = df['part1'].astype('Int64')
+    else:
+        df['part1'] = pd.Series([pd.NA]*len(df), dtype="Int64")
+    n = len(df)
+    for i in range(n):
+        if df.at[i, 'ins1'] == 'viola':
+            if i - 2 >= 0:
+                cond = (
+                    pd.notna(df.at[i-2, 'ins1']) and df.at[i-2, 'ins1'] == 'violin' and pd.notna(df.at[i-2, 'part1']) and df.at[i-2, 'part1'] == 1 and
+                    pd.notna(df.at[i-1, 'ins1']) and df.at[i-1, 'ins1'] == 'violin' and pd.notna(df.at[i-1, 'part1']) and df.at[i-1, 'part1'] == 2
+
+                )
+                if not cond:
+                    df.at[i-2, 'ins1'] = 'violin'
+                    df.at[i-2, 'part1'] = 1
+                    df.at[i-1, 'ins1'] = 'violin'
+                    df.at[i-1, 'part1'] = 2
+    df = df.copy()
+    # Ensure nullable int
+    df['part1'] = df['part1'].astype('Int64')
+    n = len(df)
+    for i in range(n):
+        if pd.notna(df.at[i, 'part1']) and df.at[i, 'part1'] == 1:
+            # Check if next row exists and is matching part 2
+            if not (
+                i + 1 < n and
+                df.at[i+1, 'ins1'] == df.at[i, 'ins1'] and
+                df.at[i+1, 'part1'] == 2
+            ):
+                df.at[i, 'part1'] = pd.NA
+    return df
+def outputDebugBeforeConstructBar(restList: List[Rest], noteGroupVerticallyMerged: List[NoteGroup], sfnClefList:List[Union[Accidentals, Clef, None]]):
+    image2 = image.copy()
+    for r in restList:
+        if r is None:
+            continue
+        x0,y0,x1,y1 = r.boundingBox
+        image2 = cv2.rectangle(image2, (x0,y0),(x1,y1),(255,0,160), 3, cv2.LINE_AA)
+    for n in noteGroupVerticallyMerged:
+        if n is None:
+            continue
+        x0,y0,x1,y1 = n.boundingBox
+        image2 = cv2.rectangle(image2, (x0,y0),(x1,y1),(255,255,0), 3, cv2.LINE_AA)
+    for s in sfnClefList:
+        if s is None:
+            continue
+        x0,y0,x1,y1 = s.boundingBox
+        image2 = cv2.rectangle(image2, (x0,y0),(x1,y1),(0,0,255), 3, cv2.LINE_AA)
+    imwrite('beforeConstructBar.jpg',image2)
+    return image2
 if __name__ == '__main__':
     noteGroupMap: np.ndarray
     stemIdxMap: np.ndarray
@@ -934,10 +1150,11 @@ if __name__ == '__main__':
     staffList: List[Staff]
     sheetName = 'Bee_5_challenge'
     lenString = 3
-    for number in range(1,5):
-        csvPath = rf"orch_dataset\{sheetName}\csv\{sheetName}_{numberToString(number,lenString)}.csv"
+    runWholeModel = False
+    for number in range(28,29):
         jsonPath = rf"orch_dataset\{sheetName}\csv\{sheetName}.json"
-        df = pd.read_csv(csvPath)
+        csvPath = rf"orch_dataset\{sheetName}\csv\{sheetName}_{numberToString(number, lenString)}.csv"
+        df = readCsvAndEditViolin(csvPath)
         pageMetadata = ScoreMetaData(df, jsonPath, number == 1)
         instrumentList = ScoreMetaData.get_instruments()
         imgName = rf"{sheetName}_{number}"
@@ -948,7 +1165,7 @@ if __name__ == '__main__':
         if not os.path.isdir(rf"orch_dataset\{sheetName}\xmls"):
             os.mkdir(rf"orch_dataset\{sheetName}\xmls")
         
-        if not os.path.exists(pklPath):
+        if not os.path.exists(pklPath) or runWholeModel:
             (
                 noteGroupMap,
                 stemIdxMap,
@@ -979,31 +1196,33 @@ if __name__ == '__main__':
                 )
             print(f"finishing processing sheet {sheetName}_{number}")
         # to save time running previous step (Debug only)
+        else:
+            with open(pklPath, "rb") as f:
+                (
+                    noteGroupMap,
+                    stemIdxMap,
+                    noteGroupVerticallyMerged,
+                    restMap,
+                    restList,
+                    sfnClefMap,
+                    sfnClefList,
+                    beamMapImg,
+                    staffList,
+                    dataDict
+                ) = pickle.load(f)
 
-        with open(pklPath, "rb") as f:
-            (
-                noteGroupMap,
-                stemIdxMap,
-                noteGroupVerticallyMerged,
-                restMap,
-                restList,
-                sfnClefMap,
-                sfnClefList,
-                beamMapImg,
-                staffList,
-                dataDict
-            ) = pickle.load(f)
-
-        # !!! decoded stuff from score (by bar)
-        # !!! note object by staff line (object not just decoded)
-        allItemInScore = getAllObjectInEachLine(noteGroupMap, noteGroupVerticallyMerged, restMap, restList, sfnClefMap, sfnClefList, beamMapImg, staffList)
+        # # !!! decoded stuff from score (by bar)
+        # # !!! note object by staff line (object not just decoded)
+        # allItemInScore = getAllObjectInEachLine(noteGroupMap, noteGroupVerticallyMerged, restMap, restList, sfnClefMap, sfnClefList, beamMapImg, staffList)
         
             
         image = dataDict['image']
         # get Barline locations -> bar center for each track: List[List[int]]
-        barEachTrack = getBarsEachTrack(image, beamMapImg, staffList)
 
-        
+        barEachTrack = getBarsEachTrack(image, beamMapImg, staffList, tolerance = 20)
+
+        retImg = outputDebugBeforeConstructBar(restList, noteGroupVerticallyMerged, sfnClefList)
+        outputImWrite(f"{imgName}_beforeBar.jpg", retImg)
         # TODO: add in the bar time signature, [[(9.8),(9,8)...], [(9.8),(9,8),(4,4)...]] etc.
         barChangeList = dict()
         barChangeList['0,0'] = [2,4] # (track, num),(TStop, TSbottom)
@@ -1012,9 +1231,16 @@ if __name__ == '__main__':
 
         numBarsEachTrack = [numBarsEachLine[p[0]] for p in pageMetadata.getTrackRange()]
 
+        noteRestMap, retImg = stackItemVertically(image, barList, pageMetadata, staffList, noteGroupVerticallyMerged, restList)
+        outputImWrite(f"{imgName}_stack.jpg", retImg)
+        cv2.imwrite(f"test{number}.jpg",retImg)
+        
+        
+        #'''
         # tune bar list based on timeSignature
         barBreakPoints = tuneBarList(barList, numBarsEachTrack)
-        
+
+                # get all the elements on that line and continue changing currX
         toneHelper = ToneHelper("keySignatureMapping.json")
         
         # returned BarList is exactly what we see in the score (two instrument in one line etc.)
@@ -1028,16 +1254,15 @@ if __name__ == '__main__':
         assert len(ksListAllTrack) == len(barListPerInstrument[0])
         
         instrument_dict = constructInstrumentMappingDict("instrumentMapping.json")
-        score, scoreShifted, debugImages = exportXML(barListPerInstrument, instrumentEachLine, toneHelper, instrument_dict, ksListAllTrack, image, imgName)
+        score, debugImages = exportXML(barListPerInstrument, instrumentEachLine, toneHelper, instrument_dict, ksListAllTrack, image, imgName)
         score.write('musicxml', scorePath)
         print(f"score write to {scorePath}")
-        scoreShifted.write('musicxml',scoreShiftedPath)
-        print(f"shifted score write to {scoreShiftedPath}")
+        # scoreShifted.write('musicxml',scoreShiftedPath)
+        # print(f"shifted score write to {scoreShiftedPath}")
         print()
+        #'''
 
-
-
-            
+          
                 
 
 
