@@ -557,3 +557,38 @@ class Bar:
             else:
                 elm.tunedLength = origLens[currNewLenIdx]
             currNewLenIdx+=1
+
+class TimeSignature:
+    def __init__(self, yolo_class:int,bbox:Tuple[int,int,int,int],confidence:float):
+        self.yolo_class = yolo_class
+        self.boundingBox = bbox
+        self.str = None
+        self.staffline = None
+        self.barLoc = None
+        self.confidence = confidence
+        self.valid = True
+        # mapping
+        map_data = [
+            "4,4", "3,4", "6,4", "2,4", "c", "6,8", "8,4", "9,4", "13,8", 
+            "10,4", "3,8", "7,8", "9,8", "6,2", "4,2", "ch", "12,8", "5,4"
+        ]
+        if yolo_class < len(map_data):
+            self.str = map_data[yolo_class]
+        else:
+            self.str = "invalid"
+    def getString(self):
+        return self.str
+    def getBbox(self) -> Tuple[int,int,int,int]:
+        return self.boundingBox
+    def getClass(self) -> int:
+        return self.yolo_class
+    def setstaffline(self, staffline:int):
+        self.staffline = staffline
+    def setBarLoc(self, barLoc:int):
+        self.barLoc = barLoc
+    def getConfidence(self) -> float:
+        return self.confidence
+    def setValid(self, valid:bool):
+        self.valid = valid
+    def isValid(self) -> bool:
+        return self.valid
