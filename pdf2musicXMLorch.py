@@ -1182,7 +1182,7 @@ if __name__ == '__main__':
         img_height, img_width, channels = img.shape
 
         # yolo detect time signature
-        yolo_model_path = "yolo/best_time_signature.pt"
+        yolo_model_path = "best_time_signature.pt"
         time_signature_list = detect_time_signatures(yolo_model_path, imgPath)
 
         # filter for valid time signatures only
