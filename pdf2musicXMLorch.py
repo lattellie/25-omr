@@ -922,6 +922,178 @@ def getTrackKsAndNoteShift(toneHelper: ToneHelper, instrumentList: List[str]) ->
         trackNoteShift.append(noteShift)
     return trackKsShift, trackNoteShift
 
+# time signatures
+def getMeasuresEachStaff(image: np.ndarray, beamMapImg: np.ndarray, staffList: List[Staff]):
+    img = image.copy()
+    # 第一維：哪一行 staff (長度等於 len(staffList))
+    allStavesMeasures = [[] for _ in range(len(staffList))]
+    
+    # 取得類別 Map 並只關注小節線類別 (4)
+    _, itemMap, _ = cv2.split(beamMapImg)
+    staffCenters = [sf.ys[2] for sf in staffList]
+    staffImgBinary = (itemMap == 4)[staffCenters, :]
+    
+    # 利用 TrackRange 偵測，因為同一個 Track 的小節線通常是垂直對齊的
+    for trkRange in pageMetadata.getTrackRange():
+        staves_in_track = range(trkRange[0], trkRange[1] + 1)
+        
+        # 投影判定小節線位置
+        barSum = np.sum(staffImgBinary[trkRange[0]:trkRange[1]+1, :], axis=0)
+        numStaves = len(staves_in_track)
+        barPos = np.where(barSum > numStaves * 0.7)[0]
+        
+        if len(barPos) > 0:
+            # --- 1. 篩選小節線：連續像素內 (<=5) 僅保留最右邊的一個值 ---
+            barLinesX = []
+            if len(barPos) > 0:
+                temp_group_max = barPos[0]
+                for i in range(1, len(barPos)):
+                    if barPos[i] - barPos[i-1] <= BAR_MAX_GAP:
+                        temp_group_max = barPos[i] # 持續更新，保留最右邊
+                    else:
+                        barLinesX.append(temp_group_max)
+                        temp_group_max = barPos[i]
+                barLinesX.append(temp_group_max)
+            
+            # --- 2. 根據小節線生成「小節 (Measures)」 ---
+            # 如果有 N 條線 (barLinesX)，產生 N-1 個小節
+            if len(barLinesX) >= 2:
+                for m_idx in range(len(barLinesX) - 1):
+                    m_left = barLinesX[m_idx]
+                    m_right = barLinesX[m_idx+1]
+                    
+                    # 分配給該 Track 裡的每一行 Staff
+                    for s_idx in staves_in_track:
+                        target_staff = staffList[s_idx]
+                        top = target_staff.ys[0]
+                        bottom = target_staff.ys[-1]
+                        
+                        # 建立小節 Bounding Box [left, right, top, bottom]
+                        measure_bbox = [int(m_left), int(m_right), int(top), int(bottom)]
+                        allStavesMeasures[s_idx].append(measure_bbox)
+                        
+                        # 視覺化：畫出小節範圍 (用藍色框表示小節)
+                        cv2.rectangle(img, (m_left, top), (m_right, bottom), (255, 0, 0), 1)
+
+    cv2.imwrite("measures_detected.jpg", img)
+    return allStavesMeasures
+
+def detect_time_signatures(model_path: str, img_path: str, imgsz: int = 1792, conf: float = 0.5) -> List[TimeSignature]:
+        from ultralytics import YOLO
+        time_signatures = []
+
+        model = YOLO(str(model_path))
+        results = model.predict(
+            source=str(img_path),
+            imgsz=imgsz,
+            conf=conf,
+            save=False,
+            verbose=False
+        )
+
+        r = results[0]
+        if r.boxes is not None and len(r.boxes) > 0:
+            clss   = r.boxes.cls.cpu().tolist()
+            confs  = r.boxes.conf.cpu().tolist()
+            xyxys  = r.boxes.xyxy.cpu().tolist()
+
+            for i in range(len(clss)):
+                cls_id = int(clss[i])
+                conf_val = float(confs[i])
+                x1, y1, x2, y2 = xyxys[i]
+                bbox = (int(x1), int(y1), int(x2), int(y2))
+                ts_obj = TimeSignature(yolo_class=cls_id, bbox=bbox, confidence=conf_val)
+                time_signatures.append(ts_obj)
+
+        return time_signatures
+
+def map_time_signatures_to_score(time_signature_list, staffList, allStavesMeasures, allItemInScore):
+    """
+    將 TimeSignature 物件映射到對應的 Staff 和 Measure。
+    """
+    for ts in time_signature_list:
+        if not ts.isValid():
+            continue
+
+        tx1, ty1, tx2, ty2 = ts.getBbox()
+        ts_cx = (tx1 + tx2) / 2  # 中心 X
+        ts_cy = (ty1 + ty2) / 2  # 中心 Y
+        ts_h = ty2 - ty1         # bbox 高度
+
+        # --- 規則 1: 縱向尋找最靠近的 staff ---
+        best_staff_idx = -1
+        min_dist = float('inf')
+
+        for s_idx, staff in enumerate(staffList):
+            # 計算該 staff 的中心 Y (五條線的平均值)
+            staff_cy = sum(staff.ys) / len(staff.ys)
+            dist = abs(ts_cy - staff_cy)
+            
+            if dist < min_dist:
+                min_dist = dist
+                best_staff_idx = s_idx
+
+        # 檢查垂直相差距離是否大過本身 bbox 高度
+        if best_staff_idx == -1 or min_dist > ts_h:
+            ts.setValid(False)
+            continue
+
+        ts.setstaffline(best_staff_idx)
+
+        # --- 規則 2: 水平尋找小節 (Measure) ---
+        measures = allStavesMeasures[best_staff_idx]
+        found_bar_idx = -2 # 預設未找到
+
+        # 檢查是否落在某個小節內
+        for m_idx, m_bbox in enumerate(measures):
+            mx1, mx2, my1, my2 = m_bbox
+            if mx1 <= ts_cx <= mx2:
+                found_bar_idx = m_idx
+                break
+        
+        # 如果沒在小節內，檢查是否在最後一個小節的右邊
+        if found_bar_idx == -2:
+            last_mx2 = measures[-1][1] # 最後一個小節的 x2
+            if ts_cx > last_mx2:
+                found_bar_idx = -1
+            else:
+                # 既不在小節內，也不在右邊（可能在第一小節左邊邊緣外）
+                ts.setValid(False)
+                continue
+
+        ts.setBarLoc(found_bar_idx)
+
+        # --- 規則 3: 檢查小節內的 Rest 和 NoteGroup ---
+        # 如果 barLoc 為 -1 (在最右邊之外)，通常不具備音樂意義上的音符檢查需求，可視情況跳過或判定無效
+        if found_bar_idx == -1:
+            # 依據一般邏輯，拍號不應出現在所有音符之後的最右側，建議設為無效
+            ts.setValid(False)
+            continue
+
+        # 獲取該 staff 的所有物件
+        staff_items = allItemInScore[best_staff_idx]
+        mx1, mx2, _, _ = measures[found_bar_idx]
+
+        is_invalid_by_context = False
+        for item in staff_items:
+            # 只考慮 Rest 和 NoteGroup (透過類別名稱判斷)
+            class_name = item.__class__.__name__
+            if class_name in ["Rest", "NoteGroup"]:
+                ix1, iy1, ix2, iy2 = item.getBbox()
+                item_cx = (ix1 + ix2) / 2
+                
+                # 判斷該物件是否屬於當前小節 (中心在小節範圍內)
+                if mx1 <= item_cx <= mx2:
+                    # 如果物件的中心在拍號中心的左邊 -> 拍號位置錯誤
+                    if item_cx < ts_cx:
+                        is_invalid_by_context = True
+                        break
+        
+        if is_invalid_by_context:
+            ts.setValid(False)
+            continue
+    
+
 if __name__ == '__main__':
     noteGroupMap: np.ndarray
     stemIdxMap: np.ndarray
@@ -1003,7 +1175,28 @@ if __name__ == '__main__':
         # get Barline locations -> bar center for each track: List[List[int]]
         barEachTrack = getBarsEachTrack(image, beamMapImg, staffList)
 
-        
+        allStavesMeasures = getMeasuresEachStaff(image, beamMapImg, staffList)
+
+        # load in image
+        img = cv2.imread(imgPath)
+        img_height, img_width, channels = img.shape
+
+        # yolo detect time signature
+        yolo_model_path = "yolo/best_time_signature.pt"
+        time_signature_list = detect_time_signatures(yolo_model_path, imgPath)
+
+        # filter for valid time signatures only
+        map_time_signatures_to_score(time_signature_list, staffList, allStavesMeasures, allItemInScore)
+        valid_ts_only = [ts for ts in time_signature_list if ts.isValid()]
+        time_sig_thres = 0.5 
+        final_time_sig_list = [
+            [(ts.staffline, ts.barLoc), ts.getString()] 
+            for ts in valid_ts_only 
+            if ts.getConfidence() >= time_sig_thres
+        ]
+        final_time_sig_list.sort(key=lambda x: (x[0][0], x[0][1]))
+        print("Detected Time Signatures (after filtering):", final_time_sig_list)
+
         # TODO: add in the bar time signature, [[(9.8),(9,8)...], [(9.8),(9,8),(4,4)...]] etc.
         barChangeList = dict()
         barChangeList['0,0'] = [2,4] # (track, num),(TStop, TSbottom)
