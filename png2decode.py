@@ -1,10 +1,13 @@
 
 
 import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 import statistics
 
 from sklearn.cluster import KMeans
 from collections import Counter
+from scipy.ndimage import rotate
 
 from exportXml import exportXML
 from get_prediction_singleStem import Single_Stem_Classifier
@@ -16,6 +19,7 @@ from omr.part1 import runModel1
 from omr.staffline_extraction import staff_extract_staffobj
 from omr.part2 import runModel2
 from omr.bbox import merge_nearby_bbox
+
 STEM_UP_MODEL = Single_Stem_Classifier("training/stemupImg32x32_best.pth", 3)
 STEM_DOWN_MODEL = Single_Stem_Classifier("training/stemdownImg32x32_best.pth", 3)
 MIN_BAR_HEIGHT = 8
@@ -142,7 +146,7 @@ def init_bar_height(dataDict, min_barheight):
             minMaxDiff = min(max(yuppers)-min(yuppers), max(ybottoms)-min(ybottoms))
             maxMaxDiff = max(max(yuppers)-min(yuppers), max(ybottoms)-min(ybottoms))
             ys = [int(top), int(top+unit_size), int((top+bottom)/2),int(bottom-unit_size),int(bottom)]
-            sf = Staff(int(left), int(right), ys, minMaxDiff)
+            sf = Staff(int(left), int(right), ys, minMaxDiff, yuppers, ybottoms)
             mindiffs.append(minMaxDiff)
             maxdiffs.append(maxMaxDiff)
             omrstaff_list.append(sf)
@@ -1877,6 +1881,36 @@ def constructBar(noteGroupMap:np.ndarray,
     return barList,allRanges, numBarsEachLine
 
 
+
+def find_best_rotation(staffObjList):
+    def compute_line_angle(y_values, x_start, x_end):
+        n = len(y_values)
+        x = np.linspace(x_start, x_end, n)
+        
+        # Fit line y = mx + b
+        m, _ = np.polyfit(x, y_values, 1)
+        
+        angle = np.arctan(m)  # radians
+        return angle
+    angles = []
+    
+    for oneStaff in staffObjList:
+        angle = compute_line_angle(
+            oneStaff.yUpperList,
+            oneStaff.left,
+            oneStaff.right
+        )
+        angles.append(angle)
+        angle = compute_line_angle(
+            oneStaff.yLowerList,
+            oneStaff.left,
+            oneStaff.right
+        )
+        angles.append(angle)
+    best_angle = np.median(angles)
+    return np.degrees(best_angle)
+
+
 # ==================================================================================================
 # main function
 # ==================================================================================================
@@ -1914,9 +1948,18 @@ def png2decode(img_name: str, img_path: str):
     # !!! add csv decoding for instruments here
     print(f'barheight: {bar_height}')
     print(bar_height)
-    stepSize = int(bar_height/4)
+    bestRotation = find_best_rotation(staffObjList)
+    if abs(bestRotation) > 0.05:
+        for k in dataDict.keys():
+            img = dataDict[k]
+            fillVal = 0
+            if k == 'image':
+                fillVal = 255
+            resized_image = rotate(img, angle=bestRotation, reshape=True, mode='constant', cval=fillVal)
+            dataDict[k] = resized_image
 
-    # extract the beam
+        bar_height, staffObjList = init_bar_height(dataDict, min_barheight=MIN_BAR_HEIGHT)
+    stepSize = int(bar_height/4)
     beamNoClefKeyWithStemRest, beamWithoutStemRest, beam_nostem = getBeamImage(dataDict, bar_height, staffObjList)
     
     # get the gradient beamMap and (dont filter noteheadInitial with longer beams cause might remove noteheads)

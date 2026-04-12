@@ -144,11 +144,13 @@ def get_instrument_from_string(name: str):
 # Class definitions
 # --------------------------------------------------------------------------------------------------
 class Staff:
-    def __init__(self, left:int, right:int, ys:Tuple[int,int,int,int,int], minMaxDiff:int=0):
+    def __init__(self, left:int, right:int, ys:Tuple[int,int,int,int,int], minMaxDiff:int=0, yUpperList:List[int] = [], yLowerList: List[int]=[]):
         self.left = left
         self.right = right
         self.ys = ys
         self.minDiff = minMaxDiff
+        self.yUpperList = yUpperList
+        self.yLowerList = yLowerList
     def get_yOne(self)->int:
         x = [self.ys[i+1] - self.ys[i] for i in range(len(self.ys) - 1)]
         return sum(x)//len(x)
@@ -265,6 +267,9 @@ class Rest:
         self.noteGroupId: int|None = None
         self.tunedLength: Fraction|None = None
         self.indexNumber: int|None = None
+        self.acrossLineNGID: int|None = None
+    def setAcrossLineNGID(self, id: int):
+        self.acrossLineNGID = id
     def setIndexNumber(self, index:int):
         self.indexNumber = index
     def setNgId(self, ngId:int):
@@ -295,6 +300,9 @@ class NoteGroup:
         self.restList:List[Rest] = []
         self.tunedLength: Fraction|None = None
         self.indexNumber: int|None = None
+        self.acrossLineNGID: int|None = None
+    def setAcrossLineNGID(self, id: int):
+        self.acrossLineNGID = id
     def setIndexNumber(self, index:int):
         self.indexNumber = index
     def addRest(self, rest:Rest):
@@ -551,7 +559,8 @@ class Bar:
                                 isRest = False,
                                 numNotes = len(elm.noteStemList),
                                 beamLength = beamLength,
-                                beamEnd=beamEnd)
+                                beamEnd=beamEnd,
+                                acrossLineNGID = elm.acrossLineNGID)
                 retLst.append(newElm)
             elif type(elm) == Rest:
                 newElm = RestNg(length=elm.getLengthFraction()*Fraction(3,2) if elm.hasdot else elm.getLengthFraction(),
@@ -559,7 +568,8 @@ class Bar:
                                 isRest = True,
                                 numNotes = 0,
                                 beamLength = (-1,-1),
-                                beamEnd=[-1,-1])
+                                beamEnd=[-1,-1],
+                                acrossLineNGID = elm.acrossLineNGID)
                 retLst.append(newElm)
         self.restNgList = retLst
         return retLst

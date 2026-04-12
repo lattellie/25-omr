@@ -24,7 +24,8 @@ def savePdf2Png(root_folder: str, numPngPerPage: int, rotate: bool, dpi: int = 2
             pdf_path,
             dpi=dpi,
             first_page=i,
-            last_page=i
+            last_page=i,
+            use_cropbox=True
         )
 
         fullImg = images[0]

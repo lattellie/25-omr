@@ -393,18 +393,18 @@ def stackItemVertically(image:np.ndarray,
     img2[noteRestMap<0] = (255,255,0)
     imwrite("finalNoteRest.jpg", img2)
     retImg = image.copy()
+    oneLineDist = staffList[0].get_yOne()
+    acrossLineNGID = 1
     for (xStart, xEnd, yStart, yEnd) in pageMetadata.getTrackXYRange(staffList):
         currX = xStart
         while currX < xEnd:
-            if currX > 1800:
-                a = 1
             inLineIds = np.unique(noteRestMap[yStart:yEnd, currX]).tolist()
             if inLineIds == [0]:
                 currX += 1
                 continue
-            allElementLists = []
-            allXCenters = []
-            allXEnds = []
+            allElementLists:List[NoteGroup|Rest] = []
+            allXCenters = [currX]
+            allXEnds = [currX]
             for inLineId in inLineIds:
                 if inLineId == 0:
                     continue
@@ -413,8 +413,9 @@ def stackItemVertically(image:np.ndarray,
                 elif inLineId < 0: # rest
                     currElem = restList[-inLineId]
                 allElementLists.append(currElem)
-                allXCenters.append((currElem.boundingBox[0]+currElem.boundingBox[2])//2)
-                allXEnds.append(currElem.boundingBox[2])
+                if currElem.boundingBox[2]-currElem.boundingBox[1] <= oneLineDist*2:
+                    allXCenters.append((currElem.boundingBox[0]+currElem.boundingBox[2])//2)
+                    allXEnds.append(currElem.boundingBox[2])
             xCenterAvg = sum(allXCenters)//len(allXCenters)
             newInLineIdx = np.unique(noteRestMap[yStart:yEnd, xCenterAvg]).tolist()
             if set(inLineIds) == set(newInLineIdx):
@@ -425,6 +426,9 @@ def stackItemVertically(image:np.ndarray,
                 for elem in allElementLists:
                     x0,y0,x1,y1 = elem.boundingBox
                     retImg = cv2.rectangle(retImg, (x0,y0), (x1,y1), (255,255,0), -1, cv2.LINE_AA)
+                    noteRestMap = cv2.rectangle(noteRestMap, (x0,y0), (x1,y1), 0, -1, cv2.LINE_AA)
+                    elem.setAcrossLineNGID(acrossLineNGID)
+                acrossLineNGID += 1
                 currX = max(max(allXEnds), currX)+1
             else:
                 currX = max(xCenterAvg+1, currX+1)
@@ -1150,8 +1154,8 @@ if __name__ == '__main__':
     staffList: List[Staff]
     sheetName = 'Bee_5_challenge'
     lenString = 3
-    runWholeModel = False
-    for number in range(28,29):
+    runWholeModel = True
+    for number in range(1, 2):
         jsonPath = rf"orch_dataset\{sheetName}\csv\{sheetName}.json"
         csvPath = rf"orch_dataset\{sheetName}\csv\{sheetName}_{numberToString(number, lenString)}.csv"
         df = readCsvAndEditViolin(csvPath)
@@ -1164,7 +1168,6 @@ if __name__ == '__main__':
         scoreShiftedPath = rf"orch_dataset\{sheetName}\xmls\{sheetName}_{number}_shifted.musicxml"
         if not os.path.isdir(rf"orch_dataset\{sheetName}\xmls"):
             os.mkdir(rf"orch_dataset\{sheetName}\xmls")
-        
         if not os.path.exists(pklPath) or runWholeModel:
             (
                 noteGroupMap,
@@ -1210,7 +1213,7 @@ if __name__ == '__main__':
                     staffList,
                     dataDict
                 ) = pickle.load(f)
-
+        
         # # !!! decoded stuff from score (by bar)
         # # !!! note object by staff line (object not just decoded)
         # allItemInScore = getAllObjectInEachLine(noteGroupMap, noteGroupVerticallyMerged, restMap, restList, sfnClefMap, sfnClefList, beamMapImg, staffList)
@@ -1236,11 +1239,11 @@ if __name__ == '__main__':
         cv2.imwrite(f"test{number}.jpg",retImg)
         
         
-        #'''
+        
         # tune bar list based on timeSignature
         barBreakPoints = tuneBarList(barList, numBarsEachTrack)
 
-                # get all the elements on that line and continue changing currX
+        # get all the elements on that line and continue changing currX
         toneHelper = ToneHelper("keySignatureMapping.json")
         
         # returned BarList is exactly what we see in the score (two instrument in one line etc.)
@@ -1260,7 +1263,7 @@ if __name__ == '__main__':
         # scoreShifted.write('musicxml',scoreShiftedPath)
         # print(f"shifted score write to {scoreShiftedPath}")
         print()
-        #'''
+        
 
           
                 
