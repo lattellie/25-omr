@@ -1155,11 +1155,14 @@ if __name__ == '__main__':
     sheetName = 'Bee_5_challenge'
     lenString = 3
     runWholeModel = True
-    for number in range(1, 2):
+    fullBarList = []
+    fullksListAllTrack = np.array([])
+    for number in range(5,31):
+        isInit = number == 1
         jsonPath = rf"orch_dataset\{sheetName}\csv\{sheetName}.json"
         csvPath = rf"orch_dataset\{sheetName}\csv\{sheetName}_{numberToString(number, lenString)}.csv"
         df = readCsvAndEditViolin(csvPath)
-        pageMetadata = ScoreMetaData(df, jsonPath, number == 1)
+        pageMetadata = ScoreMetaData(df, jsonPath, isInit)
         instrumentList = ScoreMetaData.get_instruments()
         imgName = rf"{sheetName}_{number}"
         imgPath = rf"orch_dataset\{sheetName}\imgs\{sheetName}_{number}\{sheetName}_{number}.png"
@@ -1217,8 +1220,14 @@ if __name__ == '__main__':
         # # !!! decoded stuff from score (by bar)
         # # !!! note object by staff line (object not just decoded)
         # allItemInScore = getAllObjectInEachLine(noteGroupMap, noteGroupVerticallyMerged, restMap, restList, sfnClefMap, sfnClefList, beamMapImg, staffList)
-        
-            
+       
+        # patch the object to make it up to date
+        for obj in noteGroupVerticallyMerged:
+            if obj and not hasattr(obj, "acrossLineNGID"):
+                obj.acrossLineNGID = None
+        for obj in restList:
+            if obj and not hasattr(obj, "acrossLineNGID"):
+                obj.acrossLineNGID = None                    
         image = dataDict['image']
         # get Barline locations -> bar center for each track: List[List[int]]
 
@@ -1262,7 +1271,16 @@ if __name__ == '__main__':
         print(f"score write to {scorePath}")
         # scoreShifted.write('musicxml',scoreShiftedPath)
         # print(f"shifted score write to {scoreShiftedPath}")
+        # if isInit:
+        #     fullBarList = barListPerInstrument
+        # else:
+        #     for i in range(len(barListPerInstrument)):
+        #         fullBarList[i]+=barListPerInstrument[i]
+        # fullksListAllTrack = np.append(fullksListAllTrack, ksListAllTrack)
         print()
+    fullscore, fulldebugImages = exportXML(fullBarList, instrumentEachLine, toneHelper, instrument_dict, fullksListAllTrack)
+
+    print()
         
 
           

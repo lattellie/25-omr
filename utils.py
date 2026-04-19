@@ -14,7 +14,7 @@ from dd_classes import RestNg
 # --------------------------------------------------------------------------------------------------
 # Setting for debug helper functions
 # --------------------------------------------------------------------------------------------------
-DEBUG_IMAGE = True
+DEBUG_IMAGE = False
 LOG_MESSAGE = True
 
 # --------------------------------------------------------------------------------------------------
@@ -139,6 +139,7 @@ def get_instrument_from_string(name: str):
     for key, instr_class in instrument_classes.items():
         if key in name_lower:
             return instr_class()
+        
     return instrument.Piano()
 # --------------------------------------------------------------------------------------------------
 # Class definitions
@@ -300,7 +301,7 @@ class NoteGroup:
         self.restList:List[Rest] = []
         self.tunedLength: Fraction|None = None
         self.indexNumber: int|None = None
-        self.acrossLineNGID: int|None = None
+        self.acrossLineNGID: int|None = None        
     def setAcrossLineNGID(self, id: int):
         self.acrossLineNGID = id
     def setIndexNumber(self, index:int):
