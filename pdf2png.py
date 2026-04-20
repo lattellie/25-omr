@@ -1,41 +1,115 @@
-from pdf2image import convert_from_path
 import os
+from pdf2image import convert_from_path, pdfinfo_from_path
 from PIL import Image
 
-# yyy/xxx/ -> yyy/xxx/imgs/xxx_i/xxx_i.png
-def savePdf2Png(root_folder:str, numPngPerPage:int, rotate:bool):
+def savePdf2Png(root_folder: str, numPngPerPage: int, rotate: bool, dpi: int = 200):
     file_name = os.path.basename(root_folder)
     pdf_path = os.path.join(root_folder, f'{file_name}.pdf')
-    images = convert_from_path(pdf_path, dpi=300)
-    imgNum = 1
+
+    # Get number of pages safely
+    info = pdfinfo_from_path(pdf_path)
+    num_pages = info["Pages"]
+
     img_root = os.path.join(root_folder, 'imgs')
     if not os.path.isdir(img_root):
         os.mkdir(img_root)
-    for fullImg in images:
+
+    imgNum = 1
+
+    # Process ONE page at a time
+    for i in range(1, num_pages + 1):
+        print(f"Processing page {i}/{num_pages}...")
+
+        images = convert_from_path(
+            pdf_path,
+            dpi=dpi,
+            first_page=i,
+            last_page=i,
+            use_cropbox=True
+        )
+
+        fullImg = images[0]
+
         if rotate:
             fullImg = fullImg.transpose(Image.Transpose.ROTATE_270)
+
+        width, height = fullImg.size
+
         if numPngPerPage == 1:
             image = fullImg
+
             folderPath = os.path.join(img_root, f'{file_name}_{imgNum}')
-            if not os.path.isdir(folderPath):
-                os.mkdir(folderPath)
-            newroute = os.path.join(folderPath,f'{file_name}_{imgNum}.png')
+            os.makedirs(folderPath, exist_ok=True)
+
+            newroute = os.path.join(folderPath, f'{file_name}_{imgNum}.png')
             image.save(newroute, 'PNG')
-            print(f"image {imgNum} saved to {newroute}")
-            imgNum = imgNum+1
+
+            print(f"Image {imgNum} saved to {newroute}")
+            imgNum += 1
+
         else:
+            # Split page horizontally into equal parts
+            split_width = width // numPngPerPage
+
             for j in range(numPngPerPage):
-                width, height = fullImg.size
-                image = fullImg.crop((width//2*j, 0, (width//2)*(j+1), height))
+                image = fullImg.crop((
+                    split_width * j,
+                    0,
+                    split_width * (j + 1),
+                    height
+                ))
+
                 folderPath = os.path.join(img_root, f'{file_name}_{imgNum}')
-                if not os.path.isdir(folderPath):
-                    os.mkdir(folderPath)
-                newroute = os.path.join(folderPath,f'{file_name}_{imgNum}.png')
+                os.makedirs(folderPath, exist_ok=True)
+
+                newroute = os.path.join(folderPath, f'{file_name}_{imgNum}.png')
                 image.save(newroute, 'PNG')
-                print(f"image {imgNum} saved to {newroute}")
-                imgNum = imgNum+1
+
+                print(f"Image {imgNum} saved to {newroute}")
+                imgNum += 1
+
+
 if __name__ == '__main__':
-    savePdf2Png('orch_dataset/Bee_5_challenge',1,False)
+    savePdf2Png('orch_dataset/Bee_4_challenge', 1, False, dpi=200)
+
+# from pdf2image import convert_from_path
+# import oszcxf
+# from PIL import Image
+
+# # yyy/xxx/ -> yyy/xxx/imgs/xxx_i/xxx_i.png
+# def savePdf2Png(root_folder:str, numPngPerPage:int, rotate:bool):
+#     file_name = os.path.basename(root_folder)
+#     pdf_path = os.path.join(root_folder, f'{file_name}.pdf')
+#     images = convert_from_path(pdf_path, dpi=300)
+#     imgNum = 1
+#     img_root = os.path.join(root_folder, 'imgs')
+#     if not os.path.isdir(img_root):
+#         os.mkdir(img_root)
+#     for fullImg in images:
+#         if rotate:
+#             fullImg = fullImg.transpose(Image.Transpose.ROTATE_270)
+#         if numPngPerPage == 1:
+#             image = fullImg
+#             folderPath = os.path.join(img_root, f'{file_name}_{imgNum}')
+#             if not os.path.isdir(folderPath):
+#                 os.mkdir(folderPath)
+#             newroute = os.path.join(folderPath,f'{file_name}_{imgNum}.png')
+#             image.save(newroute, 'PNG')
+#             print(f"image {imgNum} saved to {newroute}")
+#             imgNum = imgNum+1
+#         else:
+#             for j in range(numPngPerPage):
+#                 width, height = fullImg.size
+#                 image = fullImg.crop((width//2*j, 0, (width//2)*(j+1), height))
+#                 folderPath = os.path.join(img_root, f'{file_name}_{imgNum}')
+#                 if not os.path.isdir(folderPath):
+#                     os.mkdir(folderPath)
+#                 newroute = os.path.join(folderPath,f'{file_name}_{imgNum}.png')
+#                 image.save(newroute, 'PNG')
+#                 print(f"image {imgNum} saved to {newroute}")
+#                 imgNum = imgNum+1
+# if __name__ == '__main__':
+#     savePdf2Png('orch_dataset/Bee_8_challenge',1,False)
 
 
 # # Path to the PDF file
