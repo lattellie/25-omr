@@ -23,50 +23,17 @@ class ScoreMetaData:
     # static 
     instruments: List[str] = []
 
-    def __init__(self, pd_frame: pd.DataFrame, json_path: str, initInstruments = False):
-        self.jsonPath: str = json_path
-        self.pdFrame: pd.DataFrame = pd_frame
-        self.trackRange: List[Tuple[int,int]] = []
-        self.groupingRange: List[List[Tuple[int,int]]] = []
-        for i in range(1,4):
-            df[f"combined{i}"] = (
-                df[f"ins{i}"]
-                + df[f"part{i}"].apply(lambda x: "" if pd.isna(x) else '__'+str(int(x)))
-                + df[f"tone{i}"].apply(lambda x: "" if pd.isna(x) else ':'+x)
-            ) # 'clarinet_1:B flat'
-        # special case for timpani
-        mask = df["ins1"] == "timpani"
-        df.loc[mask, "combined1"] = "timpani"
-        df.loc[mask, ["combined2", "combined3"]] = np.nan
-        if initInstruments:
-            df_filtered = df[['combined1', 'combined2','combined3']][df['system'] == 1]
-            instrument_list = [str(x) for x in df_filtered.to_numpy().flatten() if pd.notna(x)]
-            self.set_instruments(instrument_list)
-            with open(self.jsonPath, "w", encoding="utf-8") as f:
-                json.dump(instrument_list, f, ensure_ascii=False, indent=2)
-            filteredInstrument = input("filter instrument and enter")
-            with open(self.jsonPath, "r", encoding="utf-8") as f:
-                instrument_list = json.load(f)
-                self.set_instruments(instrument_list)
-        elif os.path.exists(self.jsonPath) and self.get_instruments() == []:
-            with open(self.jsonPath, "r", encoding="utf-8") as f:
-                instrument_list = json.load(f)
-                self.set_instruments(instrument_list)
+    def __init__(self, numInstrument: int, numLines: int, instrumentList: List[str]):
+        self.numInstrument = numInstrument
+        self.numLines = numLines
+        assert self.numLines%self.numInstrument == 0
+        self.numTrack = self.numLines // self.numInstrument
+        self.trackRange = [(i*self.numInstrument, (i+1)*self.numInstrument-1) for i in range(self.numTrack)]
+        self.set_instruments(instrumentList)
         
 
     def getTrackRange(self) -> List[Tuple[int,int]]:
-        if len(self.trackRange)!= 0:
-            return self.trackRange
-        col = self.pdFrame["system"]
-        groups = col.ne(col.shift()).cumsum()
-        ranges = (
-            self.pdFrame
-            .groupby(groups)
-            .apply(lambda g: (g.index[0], g.index[-1]))
-            .tolist()
-        )
-        self.trackRange = ranges
-        return ranges
+        return self.trackRange
     
     def getTrackXYRange(self, staffList:List[Staff]):
         ranges = self.getTrackRange()
@@ -77,38 +44,8 @@ class ScoreMetaData:
             retRangeList.append((staffList[start].left, staffList[start].right, staffList[start].ys[0], staffList[end].ys[-1]))
         return retRangeList
 
-    def getGroupingRange(self)->List[List[Tuple[int,int]]]:
-        if len(self.groupingRange)!= 0:
-            return self.groupingRange
-        range1 = self.getTrackRange()
-
-        col2 = self.pdFrame["staffgroup"]
-        groups2 = col2.ne(col2.shift()).cumsum()
-        ranges2 = (
-            self.pdFrame
-            .groupby(groups2)
-            .apply(lambda g: (g.index[0], g.index[-1]))
-            .tolist()
-        )
-        rangeList = []
-        currentIdx = 0
-        for r in range1:
-            rangeInLine = []
-            while currentIdx < len(ranges2) and ranges2[currentIdx][1] <= r[1]:
-                rangeInLine.append(ranges2[currentIdx])
-                currentIdx += 1
-            rangeList.append(rangeInLine)
-        self.groupingRange = rangeList
-        return rangeList
     def getInstrumentEachTrack(self) -> List[List[str]]:
-        return self.pdFrame[['combined1', 'combined2', 'combined3']].apply(
-            lambda row: row.dropna().tolist(),
-            axis=1
-        ).tolist()
-    def getInstrumentIndexEachTrack(self) -> List[List[int]]:
-        strList = self.getInstrumentEachTrack()
-        insList = self.get_instruments()
-        return [[insList.index(r) for r in row] for row in strList]
+        return [[i] for i in self.instruments] * self.numTrack
     
     # get the number of track that line belongs to
     def getTrackForLineIdx(self, lineIdx: int) -> int:
@@ -917,12 +854,17 @@ def exportXML(barList:List[List[Bar]],
         if currLength == 0: # account for tuned to 0
             return flatSet, sharpSet, None
         if len(keyLst) > 1:
+            keyLst = list(set(keyLst))
             for k in keyLst:
                 if k[-1] == '-':
                     keyLst.remove(k)
                     keyLst.append(k[:-1]+'4')
             return flatSet, sharpSet, chord.Chord(keyLst, quarterLength = currLength*4)
         elif len(keyLst) == 1:
+            for k in keyLst:
+                if k[-1] == '-':
+                    keyLst.remove(k)
+                    keyLst.append(k[:-1]+'4')
             return flatSet, sharpSet, note.Note(keyLst[0], quarterLength=currLength*4)
         else:
             return flatSet, sharpSet, None # ornament
@@ -1317,7 +1259,39 @@ def prepareTSBarChangeList(data, trackList):
     }
 
     return formatted_result, last_value
-
+def clearExtraMapping(noteGroupMap: np.ndarray,
+                        stemIdxMap: np.ndarray,
+                        noteGroupVerticallyMerged: List[NoteGroup | None],
+                        restMap: np.ndarray,
+                        restList: List[Rest | None],
+                        sfnClefMap: np.ndarray,
+                        sfnClefList: List[Union[Accidentals, Clef, None]],
+                        beamMapImg: np.ndarray,
+                        staffList: List[Staff],
+                        dataDict,
+                        pageMetadata: ScoreMetaData
+                        ):
+    rangeInPair = [0]
+    trackRange = pageMetadata.getTrackRange()
+    for trk in trackRange:
+        start, end = trk
+        sf0 = staffList[start]
+        rangeInPair.append(sf0.ys[0]-int(sf0.get_yOne_float()*5))
+        sf0 = staffList[end]
+        rangeInPair.append(sf0.ys[-1]+int(sf0.get_yOne_float()*5))
+    pageheight = stemIdxMap.shape[0]
+    rangeInPair.append(pageheight)
+    pairs = list(zip(rangeInPair[::2], rangeInPair[1::2]))
+    for currMap in [noteGroupMap, stemIdxMap, restMap, sfnClefMap, beamMapImg]:
+        for (st,ed) in pairs:
+            if st<0 or ed<0 or st>=pageheight or ed>=pageheight:
+                continue
+            currMap[st:ed,:] = currMap[0,0]
+    for ddKey in dataDict:
+        for (st,ed) in pairs:
+            dataDict[ddKey][st:ed,:] = dataDict[ddKey][0,0]
+    return noteGroupMap, stemIdxMap,noteGroupVerticallyMerged, restMap, restList, sfnClefMap, sfnClefList, beamMapImg, staffList,dataDict
+    
 if __name__ == '__main__':
     noteGroupMap: np.ndarray
     stemIdxMap: np.ndarray
@@ -1328,36 +1302,23 @@ if __name__ == '__main__':
     sfnClefList: List[Union[Accidentals, Clef, None]]
     beamMapImg: np.ndarray
     staffList: List[Staff]
-    sheetName = 'Bee_7_challenge'
-    prevBarTS = [2,4]
+    rootFolder = "sq_dataset"
+    sheetName = 'sq1'
+    scoreInstruments = ['violin1','viola','cello']
+    prevBarTS = [4,4]
     lenString = 3
     runWholeModel = False
-    fullBarList = []
+    fullBarList = [[] for _ in range(len(scoreInstruments))]
     fullksListAllTrack = np.array([])
-    dataSeperate = [1,8,16,19,22,30,36,39,46,53,63,75,87,91,95,99,103,108,118,127,138,148,157,162,167,171,184,196,205,209,213,225,235,245,255,260,270,279,283,287,291,295,300,311,323,331,335,346,358,366,370,376,380,384,397,409,416,422,428,433,439,444, #1~62
-                    1,32,63,77,84,91,106,120,134,146,158,170,182,192,212,217,230,244,261, #63~81
-                    1,16,34,56,76,97,118,135,143,160,181,198,214,233,250,259,277,293,317,337,357,377,396,404,424,441,459,477,496,513,531,554,574,593,613,629,637,645, #82~119 # 84 + 1, 91 + 4+1, 96~+1 111+1
-                    1,7,12,17,21,28,34,39,52,60,73,81,90,104,113,119,122,129,146,151,154,159,163,177,191,203,218,226,231,238,245,251,257,263,271,278,290,302,314,320,328,335,340,347,358,370,382,394,400,406,414,421,429,437,445,453,459 #148+1 #120~ 122+1 124+1 136+5 140+2 142+1
-                    ]
-
-    for number in range(1, 5): #(51,53):
-        isInit = dataSeperate[number-1] == 1
-        jsonPath = rf"orch_dataset\{sheetName}\csv\{sheetName}.json"
-        csvPath = rf"orch_dataset\{sheetName}\csv\{sheetName}_{numberToString(number, lenString)}.csv"
-        df = readCsvAndEditViolin(csvPath)
-        pageMetadata = ScoreMetaData(df, jsonPath, isInit)
-        instrumentList = ScoreMetaData.get_instruments()
-        if (isInit):
-            print(f"initing the instrument List to {pageMetadata}")
-            print(f"updated instrument list: {instrumentList}")
-
+    clearExtra = True # for piano quartet etc. if there's different size of lines
+    for number in range(1, 11): #(51,53):
         imgName = rf"{sheetName}_{number}"
-        imgPath = rf"orch_dataset\{sheetName}\imgs\{sheetName}_{number}\{sheetName}_{number}.png"
-        pklPath = rf"orch_dataset\{sheetName}\imgs\{sheetName}_{number}\{sheetName}_{number}.pkl"
-        scorePath = rf"orch_dataset\{sheetName}\xmls\{sheetName}_{number}.musicxml"
-        scoreShiftedPath = rf"orch_dataset\{sheetName}\xmls\{sheetName}_{number}_shifted.musicxml"
-        if not os.path.isdir(rf"orch_dataset\{sheetName}\xmls"):
-            os.mkdir(rf"orch_dataset\{sheetName}\xmls")
+        imgPath = rf"{rootFolder}\{sheetName}\imgs\{sheetName}_{number}\{sheetName}_{number}.png"
+        pklPath = rf"{rootFolder}\{sheetName}\imgs\{sheetName}_{number}\{sheetName}_{number}.pkl"
+        scorePath = rf"{rootFolder}\{sheetName}\xmls\{sheetName}_{number}.musicxml"
+        scoreShiftedPath = rf"{rootFolder}\{sheetName}\xmls\{sheetName}_{number}_shifted.musicxml"
+        if not os.path.isdir(rf"{rootFolder}\{sheetName}\xmls"):
+            os.mkdir(rf"{rootFolder}\{sheetName}\xmls")
         if not os.path.exists(pklPath) or runWholeModel:
             (
                 noteGroupMap,
@@ -1370,7 +1331,7 @@ if __name__ == '__main__':
                 beamMapImg,
                 staffList,
                 dataDict
-            ) = png2decode(imgName, imgPath)
+            ) = png2decode(imgName, imgPath, len(scoreInstruments))
             with open(pklPath, "wb") as f:
                 pickle.dump(
                     (
@@ -1403,7 +1364,11 @@ if __name__ == '__main__':
                     staffList,
                     dataDict
                 ) = pickle.load(f)
-        
+        pageMetadata = ScoreMetaData(len(scoreInstruments), len(staffList), scoreInstruments)
+        instrumentList = ScoreMetaData.get_instruments()
+
+        # if clearExtra:
+        #     noteGroupMap, stemIdxMap,noteGroupVerticallyMerged, restMap, restList, sfnClefMap, sfnClefList, beamMapImg, staffList,dataDict = clearExtraMapping(noteGroupMap, stemIdxMap,noteGroupVerticallyMerged, restMap, restList, sfnClefMap, sfnClefList, beamMapImg, staffList, dataDict, pageMetadata)
         # # !!! decoded stuff from score (by bar)
         # # !!! note object by staff line (object not just decoded)
         allItemInScore = getAllObjectInEachLine(noteGroupMap, noteGroupVerticallyMerged, restMap, restList, sfnClefMap, sfnClefList, beamMapImg, staffList)
@@ -1439,6 +1404,7 @@ if __name__ == '__main__':
             for ts in valid_ts_only 
             if ts.getConfidence() >= time_sig_thres
         ]
+        final_time_sig_list = [x for x in final_time_sig_list if x[0][0] is not None]
         final_time_sig_list.sort(key=lambda x: (x[0][0], x[0][1]))
         print("Detected Time Signatures (after filtering):", final_time_sig_list)
         barChangeList, lastTS = prepareTSBarChangeList(final_time_sig_list, pageMetadata.getTrackRange())
@@ -1483,12 +1449,12 @@ if __name__ == '__main__':
         # if isInit:
         #     fullBarList = barListPerInstrument
         # else:
-        #     for i in range(len(barListPerInstrument)):
-        #         fullBarList[i]+=barListPerInstrument[i]
+        for i in range(len(barListPerInstrument)):
+            fullBarList[i]+=barListPerInstrument[i]
         fullksListAllTrack = np.append(fullksListAllTrack, ksListAllTrack)
         print()
-    # fullscore, fulldebugImages = exportXML(fullBarList, instrumentEachLine, toneHelper, instrument_dict, fullksListAllTrack)
-    # fullscore.write('musicxml',f'{imgName}.musicxml')
+    fullscore, fulldebugImages = exportXML(fullBarList, instrumentEachLine, toneHelper, instrument_dict, fullksListAllTrack)
+    fullscore.write('musicxml',f'{imgName}.musicxml')
 
     print()
         

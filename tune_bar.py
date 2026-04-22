@@ -32,6 +32,8 @@ def calibOneGroup(elmList:List[RestNg], desiredLength:Fraction):
     endBeamTrust = [True]*len(elmList)
     if -1 in stemYs or -1 in stemXs:
         endBeamTrust = [False]*len(elmList)
+    elif 0 in [stemXs[i] == stemXs[i-1] for i in range(1,len(stemXs))]:
+        endBeamTrust = [False] * len(endBeamTrust)
     else:
         stemAtan = [math.atan((stemYs[i]-stemYs[i-1])/(stemXs[i]-stemXs[i-1])) for i in range(1,len(stemXs))]
         irregThresh = math.pi/18

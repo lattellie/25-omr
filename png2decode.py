@@ -1910,11 +1910,29 @@ def find_best_rotation(staffObjList):
     best_angle = np.median(angles)
     return np.degrees(best_angle)
 
+def clearExtraMapping(staffList: List[Staff], dataDict, numInstrument: int):
+    insToDelete = len(staffList)%numInstrument
+    medStaff = statistics.median([sf.get_yOne_float() for sf in staffList])
+    toMedDiff = [abs(sf.get_yOne_float()-medStaff) for sf in staffList]
+    indices = sorted(range(len(toMedDiff)), key=lambda i: toMedDiff[i], reverse=True)[:insToDelete]
+    for i in sorted(indices, reverse=True):
+        del staffList[i]
+    rangeInPair = [0]
+    for sf0 in staffList:
+        rangeInPair.append(sf0.ys[0]-int(sf0.get_yOne_float()*5))
+        rangeInPair.append(sf0.ys[-1]+int(sf0.get_yOne_float()*5))
+    pageheight = dataDict['image'].shape[0]
+    rangeInPair.append(pageheight)
+    pairs = list(zip(rangeInPair[::2], rangeInPair[1::2]))
+    for ddKey in dataDict:
+        for (st,ed) in pairs:
+            dataDict[ddKey][st:ed,:] = dataDict[ddKey][0,0]
+    return dataDict
 
 # ==================================================================================================
 # main function
 # ==================================================================================================
-def png2decode(img_name: str, img_path: str):
+def png2decode(img_name: str, img_path: str, instrumentNumTrack: int = 0):
     base_path = img_path.replace('.png','')
     npy_path = f"{base_path}.npy"
     pkl_path = f"{base_path}_staffList.pkl"
@@ -1942,6 +1960,7 @@ def png2decode(img_name: str, img_path: str):
     outputDebugSymbolsImg(dataDict) # generate symbols_ in debug
 
     bar_height, staffObjList = init_bar_height(dataDict, min_barheight=MIN_BAR_HEIGHT)
+
     # !!! 五線譜
     # staff.left & staff.right: 五線譜開始/結束的位置
     # staff.ys: [y0, y1, y2, y3, y4] 五線譜每行的中心位置
@@ -1960,6 +1979,9 @@ def png2decode(img_name: str, img_path: str):
 
         bar_height, staffObjList = init_bar_height(dataDict, min_barheight=MIN_BAR_HEIGHT)
     stepSize = int(bar_height/4)
+    if instrumentNumTrack != 0:
+        dataDict=clearExtraMapping(staffObjList, dataDict, instrumentNumTrack)
+
     beamNoClefKeyWithStemRest, beamWithoutStemRest, beam_nostem = getBeamImage(dataDict, bar_height, staffObjList)
     
     # get the gradient beamMap and (dont filter noteheadInitial with longer beams cause might remove noteheads)

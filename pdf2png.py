@@ -70,7 +70,7 @@ def savePdf2Png(root_folder: str, numPngPerPage: int, rotate: bool, dpi: int = 2
 
 
 if __name__ == '__main__':
-    savePdf2Png('orch_dataset/Bee_4_challenge', 1, False, dpi=200)
+    savePdf2Png('sq_dataset\sq1', 1, False, dpi=200)
 
 # from pdf2image import convert_from_path
 # import oszcxf
