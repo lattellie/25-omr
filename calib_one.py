@@ -37,7 +37,8 @@ def calib_onebar(inputLst, changeWeight, desiredLength):
             if noDotLen <= desiredLength:
                 singleCostTb[i,noDotLen] = 1
             for times in range(int(np.ceil(np.log2(desiredLength/noDotLen)))):
-                singleCostTb[i,int(noDotLen*(2**times)*1.5)] = times*currWeight
+                if int(noDotLen*(2**times)*1.5) < len(singleCostTb[i]):
+                    singleCostTb[i,int(noDotLen*(2**times)*1.5)] = times*currWeight
             for div in range(int(np.log2(noDotLen))):
                 # noDotLen/(2**div) will be integer for sure?
                 if int(noDotLen/(2**div)) <= desiredLength:
