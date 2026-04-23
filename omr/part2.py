@@ -360,10 +360,14 @@ def extract(image, output_dir):
 
     return staffList
 
-def runModel2(npy_path: str, img_path: str, output_dir: str):
+def runModel2(npy_path: str, img_path: str, output_dir: str, packedImg: bool = False):
     # output_dir will be images/tch/tch
     dataDict = np.load(npy_path,allow_pickle=True)
     dataDict = dataDict.tolist()
+    if packedImg:
+        for idx, ky in enumerate(list(dataDict.keys())):
+            img = dataDict[ky]
+            dataDict[ky] = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
     image = loadModel1(img_path, dataDict)
     staffList = extract(image, output_dir)
     return staffList

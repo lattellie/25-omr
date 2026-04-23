@@ -1303,15 +1303,16 @@ if __name__ == '__main__':
     beamMapImg: np.ndarray
     staffList: List[Staff]
     rootFolder = "sq_dataset"
-    sheetName = 'sq1'
-    scoreInstruments = ['violin1','viola','cello']
+    sheetName = 'issue'
+    scoreInstruments = ['violin__1','violin__2','viola','cello']
     prevBarTS = [4,4]
     lenString = 3
     runWholeModel = False
     fullBarList = [[] for _ in range(len(scoreInstruments))]
     fullksListAllTrack = np.array([])
     clearExtra = True # for piano quartet etc. if there's different size of lines
-    for number in range(1, 11): #(51,53):
+    packedImg = True
+    for number in range(1,2): #(51,53):
         imgName = rf"{sheetName}_{number}"
         imgPath = rf"{rootFolder}\{sheetName}\imgs\{sheetName}_{number}\{sheetName}_{number}.png"
         pklPath = rf"{rootFolder}\{sheetName}\imgs\{sheetName}_{number}\{sheetName}_{number}.pkl"
@@ -1331,7 +1332,7 @@ if __name__ == '__main__':
                 beamMapImg,
                 staffList,
                 dataDict
-            ) = png2decode(imgName, imgPath, len(scoreInstruments))
+            ) = png2decode(imgName, imgPath, len(scoreInstruments), packedImg)
             with open(pklPath, "wb") as f:
                 pickle.dump(
                     (

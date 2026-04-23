@@ -1932,7 +1932,7 @@ def clearExtraMapping(staffList: List[Staff], dataDict, numInstrument: int):
 # ==================================================================================================
 # main function
 # ==================================================================================================
-def png2decode(img_name: str, img_path: str, instrumentNumTrack: int = 0):
+def png2decode(img_name: str, img_path: str, instrumentNumTrack: int = 0, packedImg:bool = False):
     base_path = img_path.replace('.png','')
     npy_path = f"{base_path}.npy"
     pkl_path = f"{base_path}_staffList.pkl"
@@ -1944,7 +1944,7 @@ def png2decode(img_name: str, img_path: str, instrumentNumTrack: int = 0):
         dataDictOrigin = runModel1(img_path,outputPath = base_path,dodewarp=False,save_npy=True)
     if not os.path.exists(pkl_path):
         printt(f"missing pkl for {img_name}")
-        staffListOrigin = runModel2(npy_path, img_path, base_path)
+        staffListOrigin = runModel2(npy_path, img_path, base_path, packedImg)
     if os.path.exists(npy_path) and os.path.exists(pkl_path):
         printt(f"working on {img_path}")
     dataDict = np.load(npy_path,allow_pickle=True)
