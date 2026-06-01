@@ -35,6 +35,8 @@ def inference(
     manual_th: Optional[Any] = None, 
     use_tf: bool = False
 ) -> Tuple[ndarray, ndarray]:
+    import gc
+    gc.collect()
     if use_tf:
         import tensorflow as tf
 
@@ -83,7 +85,9 @@ def inference(
         batch = np.array(data[idx:idx+batch_size])
         out = model.predict(batch) if use_tf else sess.run(output_names, {'input': batch})[0]
         pred.append(out)
-
+    del sess
+    import gc
+    gc.collect()
     # Merge prediction patches
     output_shape = image.shape[:2] + (output_shape[-1],)
     out = np.zeros(output_shape, dtype=np.float32)

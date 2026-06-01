@@ -2086,6 +2086,7 @@ def assignRestDots(restList:List[Rest], beamMapImg:np.ndarray, noteGroupStemMap:
                 rs.hasdot = True
     imwrite('dotRestBox.jpg',imgbgr)
     return restList,{'dotRestBox':imgbgr}
+
 def getNoteChunks(image: np.ndarray, noteGroupMap:np.ndarray, beamMapImg:np.ndarray, noteGroupVerticallyMerged:List[NoteGroup]):
     imgrgb = image.copy()
     beamBinary = np.zeros((beamMapImg.shape[0],beamMapImg.shape[1]))
@@ -3676,8 +3677,8 @@ if __name__ == '__main__':
             beamMapImg,noteGroupMap = extendNotegroupsToStaff(noteGroupMap, noteGroupVerticallyMerged,staffObjList,beamMapImg)
             barList, barRanges, numBarsPerLine = constructBar(noteGroupMap, stemIdxMap, noteGroupVerticallyMerged, restMap,restList,sfnClefMap,sfnClefList,beamMapImg,staffObjList)
             # maskImg, tsBoxes, tsBoxesFiltered, debugImages = createMask(barList, barRanges, staffObjList, image, beamMapImg)
-            for si in debugImages.keys():
-                outputImWrite(f'{img_name}_{si}.jpg', debugImages[si])
+            # for si in debugImages.keys():
+            #     outputImWrite(f'{img_name}_{si}.jpg', debugImages[si])
             # saveBarToCsv(img_name, barList, desiredLengtdh=1)
             # trackNo = 1
             # if img_wholename in is2:

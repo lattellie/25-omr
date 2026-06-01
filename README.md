@@ -72,3 +72,18 @@
 
 
 This project utilized the segmentation models from [oemer](https://github.com/BreezeWhite/oemer)
+
+
+
+## Code Explaination + Workflow (for `pdf2musicXMLsingleLine.py`)
+### General:
+Input/output structure:
+- 
+Utils functions
+- `imwrite`: if `debugImg` set to True, will write debug image to 
+### Part 1: Code adaptation from [oemer](https://github.com/BreezeWhite/oemer)
+- `runModel1`: run the SegNet model
+- `runModel2`: run the staffLine detection model
+
+### Part 2: Post processing for oemer's output
+
