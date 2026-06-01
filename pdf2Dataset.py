@@ -57,6 +57,7 @@ if __name__ == '__main__':
             rest_yolo = [6,7,8,9,10] # 6: 1/4, 7: 1/8, 8: 1/16, 9:1/32, 10: half or whole
             knn_colors = [(255,0,0),(0,0,255),(255,255,0),(0,120,255),(40,255,40), (245, 220, 255),(230,130,175),(165,170, 70)]
             knn_yolo = [11,12,13,14,15,16,17,18] # 11: 1/4, 12: 1/8, 13: 1/16, 14: 1/32, 15: 1/64, 16:1/128, 17: 1/2, 18: whole
+            knn_stem = [19,20,21,22,23,24,25,26] # 19: 1/4's stem, 20: 1/8 ... etc.
             img = dataDict['image'].copy()
             labelList = []
             h, w = img.shape[:2]
@@ -80,6 +81,7 @@ if __name__ == '__main__':
                         x0,y0,x1,y1 = stem.noteBox
                         add_yolo_label(knn_yolo[stem.rhythm], x0, y0, x1, y1)
                         img = cv2.rectangle(img, (x0,y0), (x1,y1), knn_colors[stem.rhythm], 2, cv2.LINE_AA)
+                        add_yolo_label(knn_stem[stem.rhythm], stem.getX()-3, stem.getTopCoord()[1], stem.getX()+3, stem.getBottomCoord()[1])
                         img = cv2.rectangle(img, (stem.getX()-3, stem.getTopCoord()[1]), (stem.getX()+3, stem.getBottomCoord()[1]), knn_colors[stem.rhythm], 2, cv2.LINE_AA)
             for sfn in sfnClefList:
                 if type(sfn) == Accidentals:

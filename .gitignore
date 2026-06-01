@@ -2,7 +2,6 @@ omrEnv
 venv/
 yolo/
 output/
-debug/
 orch_dataset/
 .vscode/
 __pycache__/
@@ -11,3 +10,4 @@ string_dataset/
 !string_dataset/pdf_data/beethoven1/beethoven1.pdf
 test*
 processedData.pkl
+data_dataset/*/imgs
