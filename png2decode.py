@@ -602,14 +602,14 @@ def assignStemLength(stem_init_lst:List[Stem], image, beamMapImg:np.ndarray, ste
             if isTypical and (254-maxMapValue)+bigStep<=longestNormal*bar_height:
                 if maxMapValue < 255:
                     yend = y+(254-maxMapValue)
-                    assert max(beamMapImg[yend, xLeft,0],beamMapImg[yend, xRight,0]) >=254
-                    while max(beamMapImg[yend, xLeft,0],beamMapImg[yend, xRight,0]) >= 254-bar_height//2 and (yend-yOri)<=(longestNormal)*bar_height:
-                        yend += bigStep
-                    while max(beamMapImg[yend, xLeft,0],beamMapImg[yend, xRight,0]) == 255 and (yend-yOri)<=(longestNormal)*bar_height:
-                        yend += 1
-                    # the end of the stem doesn't have enough "stem (white)" (the image is inversed)
-                    if (254-maxMapValue)+bigStep>(longestNormal-3)*bar_height and (sum(np.max(img200bw[y:yend, x-wid:x+wid+1],1))<(yend-y)*128 or sum(np.max(img200bw[(y+yend)//2:yend, x-wid:x+wid+1],1))<(yend-y)*64):
-                        yend = yOri
+                    if max(beamMapImg[yend, xLeft,0],beamMapImg[yend, xRight,0]) >=254:
+                        while max(beamMapImg[yend, xLeft,0],beamMapImg[yend, xRight,0]) >= 254-bar_height//2 and (yend-yOri)<=(longestNormal)*bar_height:
+                            yend += bigStep
+                        while max(beamMapImg[yend, xLeft,0],beamMapImg[yend, xRight,0]) == 255 and (yend-yOri)<=(longestNormal)*bar_height:
+                            yend += 1
+                        # the end of the stem doesn't have enough "stem (white)" (the image is inversed)
+                        if (254-maxMapValue)+bigStep>(longestNormal-3)*bar_height and (sum(np.max(img200bw[y:yend, x-wid:x+wid+1],1))<(yend-y)*128 or sum(np.max(img200bw[(y+yend)//2:yend, x-wid:x+wid+1],1))<(yend-y)*64):
+                            yend = yOri
             if yend==yOri:
                 if isTypical and coordStart.hasStem and len(coordStart.alternativeBox)==0:
                     yend += min(3,longestNormal)*bar_height

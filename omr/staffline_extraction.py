@@ -294,6 +294,10 @@ def init_zones(staff_pred: ndarray, splits: int) -> Tuple[ndarray, int, int, int
     accum_x = np.sum(staff_pred, axis=0)
     accum_x = accum_x / np.mean(accum_x)
     half = round(len(accum_x) / 2)
+    if xs.size == 0:
+        xs = np.append(xs, 0)
+    if ys.size == 0:
+        ys = np.append(ys, 0)
     right_bound = min(max(xs) + 50, staff_pred.shape[1])
     left_bound = max(min(xs) - 50, 0)
     for i in range(half+10, len(accum_x)):
