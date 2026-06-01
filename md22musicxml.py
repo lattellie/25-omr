@@ -72,6 +72,8 @@ class ParserState:
     def setTimeSignature(self, ts: Tuple[int,int]):
         if ts[1] == 1 and ts[0] == 1:
             self.timeSignature = [4,4]
+        elif ts[1] == 0 and ts[0] == 0:
+            self.timeSignature = [2,2]
         elif ts[1]*ts[0] != 0:
             self.timeSignature = ts
     def getTimeSignatureString(self):
